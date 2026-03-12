@@ -9,8 +9,8 @@ cd build
 ```
 ## 2. 使用 Emscripten 配置 CMake
 ```
-emcmake cmake .. -DCMAKE_BUILD_TYPE=Release -G "Ninja" #电脑版本
-emcmake cmake .. -DCMAKE_BUILD_TYPE=Release -G "Ninja" -DWASM_USE_SIMD=ON -DWASM_USE_PTHREADS=OFF #手机版本单线程
+emcmake cmake .. -DCMAKE_BUILD_TYPE=Release -G "Ninja" # 最小 basic 版本
+emcmake cmake .. -DCMAKE_BUILD_TYPE=Release -G "Ninja" -DWASM_USE_SIMD=OFF -DWASM_USE_PTHREADS=OFF # 显式关闭 SIMD 和线程
 ```
 ## 3. 编译项目
 ```

@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"D:/yhc_code/ncnn_cpu/cmake_ncnn/wasm/build/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

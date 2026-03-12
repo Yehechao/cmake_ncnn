@@ -7,9 +7,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # 是否生成 Embind 的 TypeScript 声明文件（.d.ts）
 option(ENABLE_EMIT_TSD "Emit TypeScript declaration for embind exports" ON)
 # 是否启用 wasm SIMD
-option(WASM_USE_SIMD "Enable wasm SIMD (-msimd128)" ON)
+option(WASM_USE_SIMD "Enable wasm SIMD (-msimd128)" OFF)
 # 是否启用 wasm pthread 多线程
-option(WASM_USE_PTHREADS "Enable wasm pthreads" ON)
+option(WASM_USE_PTHREADS "Enable wasm pthreads" OFF)
 # pthread 线程池大小
 set(WASM_PTHREAD_POOL_SIZE 8 CACHE STRING "Emscripten pthread pool size")
 
@@ -71,8 +71,8 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     ${OPENCV_WASM_DIR}/lib/libopencv_core.a
 )
 
-# 链接 opencv 的三方依赖（zlib / libpng / libjpeg-turbo）
-set(OPENCV_3RDPARTY_DIR ${SRC_DIR}/ncnn_3rdpart/opencv_wasm_build/3rdparty/lib)
+# 链接 opencv 安装目录中的三方依赖（zlib / libpng / libjpeg-turbo）
+set(OPENCV_3RDPARTY_DIR ${OPENCV_WASM_DIR}/lib/opencv4/3rdparty)
 target_link_libraries(${PROJECT_NAME} PRIVATE
     ${OPENCV_3RDPARTY_DIR}/liblibpng.a
     ${OPENCV_3RDPARTY_DIR}/liblibjpeg-turbo.a
@@ -99,7 +99,6 @@ target_compile_options(${PROJECT_NAME} PRIVATE ${WASM_COMPILE_FLAGS})
 # ALLOW_MEMORY_GROWTH: 内存可增长
 # MAXIMUM_MEMORY / INITIAL_MEMORY: wasm 内存上限和初始值
 # USE_PTHREADS / PTHREAD_POOL_SIZE: 多线程开关与线程池大小
-# MODULARIZE / EXPORT_NAME: JS 模块化与导出名
 # EXPORTED_RUNTIME_METHODS: 导出的运行时方法（FS/ccall/cwrap）
 # STACK_SIZE: 栈大小（字节）
 if (ENABLE_EMIT_TSD)
@@ -116,8 +115,6 @@ set(WASM_LINK_FLAGS
     -s ALLOW_MEMORY_GROWTH=1
     -s MAXIMUM_MEMORY=1073741824
     -s INITIAL_MEMORY=268435456
-    -s MODULARIZE=1
-    -s EXPORT_NAME='YoloNcnnModule'
     -s EXPORTED_RUNTIME_METHODS=['FS','ccall','cwrap']
     -s FORCE_FILESYSTEM=1
     -s EXIT_RUNTIME=0

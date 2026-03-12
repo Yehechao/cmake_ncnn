@@ -1,0 +1,6 @@
+D:/yhc_code/ncnn_cpu/cmake_ncnn/wasm/build/CMakeFiles/yolo_ncnn_wasm.dir
+D:/yhc_code/ncnn_cpu/cmake_ncnn/wasm/build/CMakeFiles/edit_cache.dir
+D:/yhc_code/ncnn_cpu/cmake_ncnn/wasm/build/CMakeFiles/rebuild_cache.dir
+D:/yhc_code/ncnn_cpu/cmake_ncnn/wasm/build/CMakeFiles/list_install_components.dir
+D:/yhc_code/ncnn_cpu/cmake_ncnn/wasm/build/CMakeFiles/install.dir
+D:/yhc_code/ncnn_cpu/cmake_ncnn/wasm/build/CMakeFiles/install/local.dir
