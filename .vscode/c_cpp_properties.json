@@ -1,0 +1,35 @@
+{
+  "version": 4,
+  "configurations": [
+    {
+      "name": "x64-Release",
+      "compilerPath": "D:/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/cl.exe",
+      "intelliSenseMode": "windows-msvc-x64",
+      "cStandard": "c17",
+      "cppStandard": "c++17",
+      "defines": [
+        "UNICODE",
+        "_UNICODE",
+        "NOMINMAX",
+        "_CRT_SECURE_NO_WARNINGS"
+      ],
+      "includePath": [
+        "${workspaceFolder}",
+        "${workspaceFolder}/ncnn_3rdpart/opencv/build/include",
+        "${workspaceFolder}/ncnn_3rdpart/opencv/build/include/opencv2",
+        "${workspaceFolder}/ncnn_3rdpart/ncnn-20260113-windows-vs2022/x64/include",
+        "${workspaceFolder}/ncnn_3rdpart/ncnn-20260113-windows-vs2022/x64/include/ncnn"
+      ],
+      "browse": {
+        "path": [
+          "${workspaceFolder}",
+          "${workspaceFolder}/ncnn_3rdpart/opencv/build/include",
+          "${workspaceFolder}/ncnn_3rdpart/opencv/build/include/opencv2",
+          "${workspaceFolder}/ncnn_3rdpart/ncnn-20260113-windows-vs2022/x64/include",
+          "${workspaceFolder}/ncnn_3rdpart/ncnn-20260113-windows-vs2022/x64/include/ncnn"
+        ],
+        "limitSymbolsToIncludedHeaders": true
+      }
+    }
+  ]
+}

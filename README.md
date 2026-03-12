@@ -2,3 +2,24 @@
 
 通过网盘分享的文件：ncnn_3rdpart.rar
 链接: https://pan.baidu.com/s/1j-y2Ux4wGeCS15Fq_JxG1w?pwd=9h4b 提取码: 9h4b
+
+## CMake 编译
+
+
+配置：
+
+```powershell
+cmake -S . -B build-cmake -G "Visual Studio 17 2022" -A x64
+```
+
+Release 编译：
+
+```powershell
+cmake --build build-cmake --config Release
+```
+
+编译完成后，可执行文件默认在：
+
+```text
+cmake_ncnn.exe
+```

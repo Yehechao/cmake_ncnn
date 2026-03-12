@@ -1,0 +1,70 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Prepare Release",
+      "type": "shell",
+      "command": "cmd.exe",
+      "args": [
+        "/d",
+        "/c",
+        "if not exist \"${workspaceFolder}\\build-obj\" mkdir \"${workspaceFolder}\\build-obj\" && del /q \"${workspaceFolder}\\build-obj\\*.obj\" 2>nul && del /q \"${workspaceFolder}\\cmake_ncnn.exe\" 2>nul"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Compile Release Objects",
+      "type": "shell",
+      "command": "cmd.exe",
+      "args": [
+        "/d",
+        "/c",
+        "call \"D:\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars64.bat\" && cl /nologo /c /std:c++17 /EHsc /utf-8 /O2 /MD /DNDEBUG /I\"${workspaceFolder}\" /I\"${workspaceFolder}\\ncnn_3rdpart\\opencv\\build\\include\" /I\"${workspaceFolder}\\ncnn_3rdpart\\opencv\\build\\include\\opencv2\" /I\"${workspaceFolder}\\ncnn_3rdpart\\ncnn-20260113-windows-vs2022\\x64\\include\" /I\"${workspaceFolder}\\ncnn_3rdpart\\ncnn-20260113-windows-vs2022\\x64\\include\\ncnn\" ..\\Classification.cpp ..\\Heatmap.cpp ..\\main.cpp ..\\Post.cpp ..\\YoloInference.cpp"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}\\build-obj"
+      },
+      "problemMatcher": [
+        "$msCompile"
+      ]
+    },
+    {
+      "label": "Link Release",
+      "type": "shell",
+      "command": "cmd.exe",
+      "args": [
+        "/d",
+        "/c",
+        "call \"D:\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars64.bat\" && link /NOLOGO /OUT:\"${workspaceFolder}\\cmake_ncnn.exe\" \"${workspaceFolder}\\build-obj\\Classification.obj\" \"${workspaceFolder}\\build-obj\\Heatmap.obj\" \"${workspaceFolder}\\build-obj\\main.obj\" \"${workspaceFolder}\\build-obj\\Post.obj\" \"${workspaceFolder}\\build-obj\\YoloInference.obj\" /LIBPATH:\"${workspaceFolder}\\ncnn_3rdpart\\ncnn-20260113-windows-vs2022\\x64\\lib\" /LIBPATH:\"${workspaceFolder}\\ncnn_3rdpart\\opencv\\build\\x64\\vc16\\lib\" glslang.lib ncnn.lib opencv_world480.lib"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [
+        "$msCompile"
+      ]
+    },
+    {
+      "label": "Build Release",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "Prepare Release",
+        "Compile Release Objects",
+        "Link Release"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      }
+    }
+  ]
+}

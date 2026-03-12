@@ -1,5 +1,8 @@
 /build-exe/
 /build-dll/
+/build/
+/build-cmake/
+/build-obj/
 /data/
 /ncnn_3rdpart/
 *.dll
