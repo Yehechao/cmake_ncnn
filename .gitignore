@@ -20,3 +20,4 @@
 *.log
 *.tmp
 *.cache
+/build-android-arm64
