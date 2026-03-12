@@ -220,4 +220,3 @@ interface EmbindModule {
 }
 
 export type MainModule = WasmModule & typeof RuntimeExports & EmbindModule;
-export default function MainModuleFactory (options?: unknown): Promise<MainModule>;
