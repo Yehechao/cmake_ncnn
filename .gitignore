@@ -1,3 +1,10 @@
+/build-exe/
+/build-dll/
+/data/
+/ncnn_3rdpart/
 *.dll
-/data
-/ncnn_3rdpart
+*.lib
+*.exp
+*.pdb
+*.ilk
+*.exe
