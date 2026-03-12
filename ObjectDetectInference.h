@@ -10,7 +10,7 @@
 #include "utils.h"
 
 
-class NCNN_API YoloNcnn {
+class YoloNcnn {
 public:
     // 加载 OBB 检测模型
     static std::shared_ptr<YoloNcnn> load_obb(
@@ -19,7 +19,6 @@ public:
         int size,
         float conf = 0.25f,
         float iou = 0.45f,
-        bool preferGpu = false,
         int numThreads = -1);
 
     // 加载分类模型
@@ -27,7 +26,6 @@ public:
         const std::string& paramPath,
         const std::string& binPath,
         int size,
-        bool preferGpu = false,
         int numThreads = -1);
 
     ~YoloNcnn();
@@ -76,7 +74,6 @@ public:
     // 获取网络信息
     int getNetWidth() const { return m_netWidth; }
     int getNetHeight() const { return m_netHeight; }
-    bool isUsingVulkan() const { return m_useVulkanCompute; }
 
     // 设置阈值
     void setConfidenceThreshold(float conf) { m_confidenceThreshold = conf; }
@@ -114,9 +111,8 @@ private:
     YoloNcnn& operator=(const YoloNcnn&) = delete;
 
     // 初始化
-    bool initialize(const std::string& paramPath, const std::string& binPath, bool preferGpu, int numThreads);
-    bool initializeCls(const std::string& paramPath, const std::string& binPath, bool preferGpu, int numThreads);
-    static bool shouldUseVulkan();
+    bool initialize(const std::string& paramPath, const std::string& binPath, int numThreads);
+    bool initializeCls(const std::string& paramPath, const std::string& binPath, int numThreads);
 
     // 通用推理执行（直接返回输出张量指针，避免拷贝）
     bool runInference(const cv::Mat& inputImg, const float*& outputData, size_t& outputSize);
@@ -190,7 +186,6 @@ private:
     float m_confidenceThreshold;
     float m_nmsThreshold;
     bool m_isClassifier;
-    bool m_useVulkanCompute;
 
     // NCNN
     ncnn::Net m_net;

@@ -7,47 +7,7 @@
 #include <algorithm>
 #include <thread>
 
-namespace {
-int getRecommendedThreadCount() {
-    unsigned int logicalCores = std::thread::hardware_concurrency();
-    if (logicalCores == 0) {
-        logicalCores = 4;
-    }
 
-    int threads = static_cast<int>(logicalCores / 2);
-    if (threads < 1) {
-        threads = 1;
-    }
-    return threads;
-}
-
-int resolveThreadCount(int requestedThreads) {
-    if (requestedThreads <= 0) {
-        return getRecommendedThreadCount();
-    }
-    return std::max(1, requestedThreads);
-}
-
-#if defined(__ANDROID__)
-struct VulkanRuntime {
-    VulkanRuntime() {
-        ncnn::create_gpu_instance();
-        gpu_count = ncnn::get_gpu_count();
-    }
-
-    ~VulkanRuntime() {
-        ncnn::destroy_gpu_instance();
-    }
-
-    int gpu_count = 0;
-};
-
-VulkanRuntime& getVulkanRuntime() {
-    static VulkanRuntime runtime;
-    return runtime;
-}
-#endif
-}
  
 // YoloNcnn 构造函数
 YoloNcnn::YoloNcnn(int netWidth, int netHeight)
@@ -56,7 +16,6 @@ YoloNcnn::YoloNcnn(int netWidth, int netHeight)
     m_confidenceThreshold(0.25f),
     m_nmsThreshold(0.45f),
     m_isClassifier(false),
-    m_useVulkanCompute(false),
     m_heatmapCols(64) {
 
     // 初始化精确颜色映射表
@@ -68,18 +27,9 @@ YoloNcnn::~YoloNcnn() {
     m_net.clear();
 }
 
-bool YoloNcnn::shouldUseVulkan() {
-#if defined(__ANDROID__)
-    return getVulkanRuntime().gpu_count > 0;
-#else
-    return false;
-#endif
-}
-
-
 std::shared_ptr<YoloNcnn> YoloNcnn::load_obb(
     const std::string& paramPath, const std::string& binPath,
-    int size, float conf, float iou, bool preferGpu, int numThreads) {
+    int size, float conf, float iou, int numThreads) {
     
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
     // 检查模型文件是否存在
@@ -97,7 +47,7 @@ std::shared_ptr<YoloNcnn> YoloNcnn::load_obb(
     detector->m_confidenceThreshold = conf;
     detector->m_nmsThreshold = iou;
 
-    if (!detector->initialize(paramPath, binPath, preferGpu, numThreads)) {
+    if (!detector->initialize(paramPath, binPath, numThreads)) {
         std::cerr << "模型初始化失败" << std::endl;
         return nullptr;
     }
@@ -105,16 +55,12 @@ std::shared_ptr<YoloNcnn> YoloNcnn::load_obb(
     return detector;
 }
 
-bool YoloNcnn::initialize(const std::string& paramPath, const std::string& binPath, bool preferGpu, int numThreads) {
+bool YoloNcnn::initialize(const std::string& paramPath, const std::string& binPath, int numThreads) {
     try {
-        int num_cores = resolveThreadCount(numThreads);
-        m_useVulkanCompute = preferGpu && shouldUseVulkan();
 
-        m_net.opt.num_threads = num_cores;
-        m_net.opt.use_vulkan_compute = m_useVulkanCompute;
+        m_net.opt.num_threads = numThreads;
         m_net.opt.use_fp16_packed = true;      // FP16 打包优化
         m_net.opt.use_fp16_storage = true;     // FP16 存储优化
-        m_net.opt.use_fp16_arithmetic = m_useVulkanCompute;
         m_net.opt.use_packing_layout = true;   // 使用打包布局优化
         m_net.opt.lightmode = true;            // 轻量模式，减少内存占用
         
@@ -134,10 +80,8 @@ bool YoloNcnn::initialize(const std::string& paramPath, const std::string& binPa
         
         std::cout << "NCNN OBB模型初始化成功!" << std::endl;
         std::cout << "  输入尺寸: " << m_netWidth << "x" << m_netHeight << std::endl;
-        std::cout << "  线程数: " << num_cores
+        std::cout << "  线程数: " << numThreads
                   << (numThreads > 0 ? " (manual)" : " (auto)") << std::endl;
-        std::cout << "  Vulkan: " << (m_useVulkanCompute ? "ON" : "OFF") << std::endl;
-        std::cout << "  GPU preference: " << (preferGpu ? "ON" : "OFF") << std::endl;
 
         return true;
     }

@@ -28,7 +28,7 @@ int resolveThreadCount(int requestedThreads) {
 
 std::shared_ptr<YoloNcnn> YoloNcnn::load_cls(
     const std::string& paramPath, const std::string& binPath,
-    int size, bool preferGpu, int numThreads) {
+    int size, int numThreads) {
 
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
     if (!std::filesystem::exists(paramPath)) {
@@ -44,7 +44,7 @@ std::shared_ptr<YoloNcnn> YoloNcnn::load_cls(
     std::shared_ptr<YoloNcnn> classifier(new YoloNcnn(size, size));
     classifier->m_isClassifier = true;
 
-    if (!classifier->initializeCls(paramPath, binPath, preferGpu, numThreads)) {
+    if (!classifier->initializeCls(paramPath, binPath, numThreads)) {
         std::cerr << "classification model initialize failed" << std::endl;
         return nullptr;
     }
@@ -52,16 +52,15 @@ std::shared_ptr<YoloNcnn> YoloNcnn::load_cls(
     return classifier;
 }
 
-bool YoloNcnn::initializeCls(const std::string& paramPath, const std::string& binPath, bool preferGpu, int numThreads) {
+bool YoloNcnn::initializeCls(const std::string& paramPath, const std::string& binPath, int numThreads) {
     try {
         int num_cores = resolveThreadCount(numThreads);
-        m_useVulkanCompute = preferGpu && shouldUseVulkan();
 
         m_net.opt.num_threads = num_cores;
-        m_net.opt.use_vulkan_compute = m_useVulkanCompute;
+        m_net.opt.use_vulkan_compute = false;
         m_net.opt.use_fp16_packed = true;
         m_net.opt.use_fp16_storage = true;
-        m_net.opt.use_fp16_arithmetic = m_useVulkanCompute;
+        m_net.opt.use_fp16_arithmetic = false;
         m_net.opt.use_packing_layout = true;
         m_net.opt.lightmode = true;
 
@@ -82,8 +81,6 @@ bool YoloNcnn::initializeCls(const std::string& paramPath, const std::string& bi
         std::cout << "  input size: " << m_netWidth << "x" << m_netHeight << std::endl;
         std::cout << "  threads: " << num_cores
                   << (numThreads > 0 ? " (manual)" : " (auto)") << std::endl;
-        std::cout << "  Vulkan: " << (m_useVulkanCompute ? "ON" : "OFF") << std::endl;
-        std::cout << "  GPU preference: " << (preferGpu ? "ON" : "OFF") << std::endl;
 
         return true;
     }
