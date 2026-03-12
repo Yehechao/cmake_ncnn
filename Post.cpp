@@ -8,6 +8,31 @@
 #endif
 #include <opencv2/opencv.hpp>
 
+namespace {
+struct CachedRotatedRect {
+    cv::RotatedRect rect;
+    cv::Rect2f bounds;
+};
+
+inline bool boundsOverlap(const cv::Rect2f& a, const cv::Rect2f& b) {
+    return a.x < b.x + b.width &&
+           b.x < a.x + a.width &&
+           a.y < b.y + b.height &&
+           b.y < a.y + a.height;
+}
+
+inline CachedRotatedRect makeCachedRect(const HeatmapResult& result) {
+    CachedRotatedRect cached;
+    cached.rect = cv::RotatedRect(
+        cv::Point2f(result.cx, result.cy),
+        cv::Size2f(result.l, result.s),
+        result.angle * 180.0f / CV_PI
+    );
+    cached.bounds = cached.rect.boundingRect2f();
+    return cached;
+}
+}
+
 // 协方差矩阵计算
 void YoloNcnn::convariance_matrix(float w, float h, float r,
     float& a, float& b, float& c) {
@@ -50,6 +75,12 @@ float YoloNcnn::box_probiou(float cx1, float cy1, float w1, float h1, float r1,
 // 计算两个旋转框的IoU
 float YoloNcnn::calc_rotate_iou(const cv::RotatedRect& rect1,
     const cv::RotatedRect& rect2) {
+    const cv::Rect2f bounds1 = rect1.boundingRect2f();
+    const cv::Rect2f bounds2 = rect2.boundingRect2f();
+    if (!boundsOverlap(bounds1, bounds2)) {
+        return 0.0f;
+    }
+
     // 获取旋转框的四个顶点
     cv::Point2f vertices1[4];
     cv::Point2f vertices2[4];
@@ -106,6 +137,10 @@ void YoloNcnn::rotate_nms(std::vector<cv::RotatedRect>& boxes,
     // 创建索引列表并根据分数排序（降序）
     std::vector<int> idxs(boxes.size());
     std::iota(idxs.begin(), idxs.end(), 0);
+    std::vector<cv::Rect2f> bounds(boxes.size());
+    for (size_t i = 0; i < boxes.size(); ++i) {
+        bounds[i] = boxes[i].boundingRect2f();
+    }
 
     std::sort(idxs.begin(), idxs.end(), [&scores](int i1, int i2) {
         return scores[i1] > scores[i2];
@@ -136,6 +171,11 @@ void YoloNcnn::rotate_nms(std::vector<cv::RotatedRect>& boxes,
             // 使用ProbIoU计算旋转框的IoU
             const cv::RotatedRect& box1 = boxes[best_idx];
             const cv::RotatedRect& box2 = boxes[current_idx];
+
+            if (!boundsOverlap(bounds[best_idx], bounds[current_idx])) {
+                rest_idxs.push_back(current_idx);
+                continue;
+            }
 
             // 注意：ProbIoU需要弧度，而cv::RotatedRect存储的是角度
             float angle1_rad = box1.angle * CV_PI / 180.0f;
@@ -237,6 +277,10 @@ void YoloNcnn::filterMaxOnePerClassHeatmap(std::vector<HeatmapResult>& results) 
         });
 
     std::vector<bool> suppressed(results.size(), false);
+    std::vector<CachedRotatedRect> cachedRects(results.size());
+    for (size_t i = 0; i < results.size(); ++i) {
+        cachedRects[i] = makeCachedRect(results[i]);
+    }
 
     // 跨类别NMS只针对ID 1, 2, 7
     auto isCrossNmsClass = [](int id) {
@@ -258,6 +302,8 @@ void YoloNcnn::filterMaxOnePerClassHeatmap(std::vector<HeatmapResult>& results) 
 
             // 只有两个框都属于{1, 2, 7}时才进行跨类别NMS
             if (!isCrossNmsClass(r1.id) || !isCrossNmsClass(r2.id)) continue;
+
+            if (!boundsOverlap(cachedRects[i].bounds, cachedRects[j].bounds)) continue;
 
             // 计算 ProbIoU
             float iou = box_probiou(
@@ -382,19 +428,19 @@ void YoloNcnn::postprocessHeatmap(std::vector<HeatmapResult>& output,
         // 1：id5与id1、id3、id6有交集则删除
         {
             // 收集所有ID1、ID3和ID6的结果
-            std::vector<HeatmapResult> id1Results;
-            std::vector<HeatmapResult> id3Results;
-            std::vector<HeatmapResult> id6Results;
+            std::vector<CachedRotatedRect> id1Rects;
+            std::vector<CachedRotatedRect> id3Rects;
+            std::vector<CachedRotatedRect> id6Rects;
 
             for (const auto& result : output) {
                 if (result.id == 1) {
-                    id1Results.push_back(result);
+                    id1Rects.push_back(makeCachedRect(result));
                 }
                 else if (result.id == 3) {
-                    id3Results.push_back(result);
+                    id3Rects.push_back(makeCachedRect(result));
                 }
                 else if (result.id == 6) {
-                    id6Results.push_back(result);
+                    id6Rects.push_back(makeCachedRect(result));
                 }
             }
 
@@ -406,22 +452,15 @@ void YoloNcnn::postprocessHeatmap(std::vector<HeatmapResult>& output,
 
                 // 只对ID5进行判断
                 if (result.id == 5) {
-                    // 创建ID5的旋转矩形（使用640x320像素坐标）
-                    cv::RotatedRect rect5(
-                        cv::Point2f(result.cx, result.cy),
-                        cv::Size2f(result.l, result.s),
-                        result.angle * 180.0f / CV_PI
-                    );
+                    const CachedRotatedRect rect5 = makeCachedRect(result);
 
                     // 检查是否与任何一个ID1有交集
-                    for (const auto& id1 : id1Results) {
-                        cv::RotatedRect rect1(
-                            cv::Point2f(id1.cx, id1.cy),
-                            cv::Size2f(id1.l, id1.s),
-                            id1.angle * 180.0f / CV_PI
-                        );
+                    for (const auto& rect1 : id1Rects) {
+                        if (!boundsOverlap(rect5.bounds, rect1.bounds)) {
+                            continue;
+                        }
 
-                        float iou_with_id1 = calc_rotate_iou(rect5, rect1);
+                        float iou_with_id1 = calc_rotate_iou(rect5.rect, rect1.rect);
                         if (iou_with_id1 > 0) {
                             shouldKeep = false;
                             break;
@@ -430,14 +469,12 @@ void YoloNcnn::postprocessHeatmap(std::vector<HeatmapResult>& output,
 
                     // 如果还没有被过滤，检查是否与任何一个ID3有交集
                     if (shouldKeep) {
-                        for (const auto& id3 : id3Results) {
-                            cv::RotatedRect rect3(
-                                cv::Point2f(id3.cx, id3.cy),
-                                cv::Size2f(id3.l, id3.s),
-                                id3.angle * 180.0f / CV_PI
-                            );
+                        for (const auto& rect3 : id3Rects) {
+                            if (!boundsOverlap(rect5.bounds, rect3.bounds)) {
+                                continue;
+                            }
 
-                            float iou_with_id3 = calc_rotate_iou(rect5, rect3);
+                            float iou_with_id3 = calc_rotate_iou(rect5.rect, rect3.rect);
                             if (iou_with_id3 > 0) {
                                 shouldKeep = false;
                                 break;
@@ -447,14 +484,12 @@ void YoloNcnn::postprocessHeatmap(std::vector<HeatmapResult>& output,
 
                     // 如果还没有被过滤，检查是否与任何一个ID6有交集
                     if (shouldKeep) {
-                        for (const auto& id6 : id6Results) {
-                            cv::RotatedRect rect6(
-                                cv::Point2f(id6.cx, id6.cy),
-                                cv::Size2f(id6.l, id6.s),
-                                id6.angle * 180.0f / CV_PI
-                            );
+                        for (const auto& rect6 : id6Rects) {
+                            if (!boundsOverlap(rect5.bounds, rect6.bounds)) {
+                                continue;
+                            }
 
-                            float iou_with_id6 = calc_rotate_iou(rect5, rect6);
+                            float iou_with_id6 = calc_rotate_iou(rect5.rect, rect6.rect);
                             if (iou_with_id6 > 0) {
                                 shouldKeep = false;
                                 break;
@@ -654,15 +689,20 @@ void YoloNcnn::postprocessHeatmap(std::vector<HeatmapResult>& output,
         // 如果距离id1近，则删除id5，如果距离id2近，则删除id0
         {
             // 收集所有ID0和ID5的结果
-            std::vector<HeatmapResult> id0Results;
-            std::vector<HeatmapResult> id5Results;
+            struct CachedResult {
+                HeatmapResult result;
+                CachedRotatedRect rect;
+            };
+
+            std::vector<CachedResult> id0Results;
+            std::vector<CachedResult> id5Results;
 
             for (const auto& result : output) {
                 if (result.id == 0) {
-                    id0Results.push_back(result);
+                    id0Results.push_back({result, makeCachedRect(result)});
                 }
                 else if (result.id == 5) {
-                    id5Results.push_back(result);
+                    id5Results.push_back({result, makeCachedRect(result)});
                 }
             }
 
@@ -671,45 +711,35 @@ void YoloNcnn::postprocessHeatmap(std::vector<HeatmapResult>& output,
 
             // 检查每个ID0与每个ID5是否有交集
             for (const auto& id0 : id0Results) {
-                // 创建ID0的旋转矩形
-                cv::RotatedRect rect0(
-                    cv::Point2f(id0.cx, id0.cy),
-                    cv::Size2f(id0.l, id0.s),
-                    id0.angle * 180.0f / CV_PI
-                );
-
                 for (const auto& id5 : id5Results) {
-                    // 创建ID5的旋转矩形
-                    cv::RotatedRect rect5(
-                        cv::Point2f(id5.cx, id5.cy),
-                        cv::Size2f(id5.l, id5.s),
-                        id5.angle * 180.0f / CV_PI
-                    );
+                    if (!boundsOverlap(id0.rect.bounds, id5.rect.bounds)) {
+                        continue;
+                    }
 
                     // 检查是否有交集
-                    float iou = calc_rotate_iou(rect0, rect5);
+                    float iou = calc_rotate_iou(id0.rect.rect, id5.rect.rect);
                     if (iou > 0) {
                         // 有交集，需要计算距离
                         // 检查ID1和ID2是否存在
                         if (foundId1 && foundId2) {
                             // 计算id0到id1和id2的距离
                             float dist_id0_to_id1 = std::sqrt(
-                                std::pow(id0.cx - id1Result.cx, 2) +
-                                std::pow(id0.cy - id1Result.cy, 2)
+                                std::pow(id0.result.cx - id1Result.cx, 2) +
+                                std::pow(id0.result.cy - id1Result.cy, 2)
                             );
                             float dist_id0_to_id2 = std::sqrt(
-                                std::pow(id0.cx - id2Result.cx, 2) +
-                                std::pow(id0.cy - id2Result.cy, 2)
+                                std::pow(id0.result.cx - id2Result.cx, 2) +
+                                std::pow(id0.result.cy - id2Result.cy, 2)
                             );
 
                             // 计算id5到id1和id2的距离
                             float dist_id5_to_id1 = std::sqrt(
-                                std::pow(id5.cx - id1Result.cx, 2) +
-                                std::pow(id5.cy - id1Result.cy, 2)
+                                std::pow(id5.result.cx - id1Result.cx, 2) +
+                                std::pow(id5.result.cy - id1Result.cy, 2)
                             );
                             float dist_id5_to_id2 = std::sqrt(
-                                std::pow(id5.cx - id2Result.cx, 2) +
-                                std::pow(id5.cy - id2Result.cy, 2)
+                                std::pow(id5.result.cx - id2Result.cx, 2) +
+                                std::pow(id5.result.cy - id2Result.cy, 2)
                             );
 
                             // 判断哪个距离更近
@@ -722,8 +752,8 @@ void YoloNcnn::postprocessHeatmap(std::vector<HeatmapResult>& output,
                                 auto it = std::remove_if(filteredResults.begin(), filteredResults.end(),
                                     [&](const HeatmapResult& r) {
                                         return r.id == 5 &&
-                                            std::abs(r.cx - id5.cx) < 0.001f &&
-                                            std::abs(r.cy - id5.cy) < 0.001f;
+                                            std::abs(r.cx - id5.result.cx) < 0.001f &&
+                                            std::abs(r.cy - id5.result.cy) < 0.001f;
                                     }
                                 );
                                 filteredResults.erase(it, filteredResults.end());
@@ -734,8 +764,8 @@ void YoloNcnn::postprocessHeatmap(std::vector<HeatmapResult>& output,
                                 auto it = std::remove_if(filteredResults.begin(), filteredResults.end(),
                                     [&](const HeatmapResult& r) {
                                         return r.id == 0 &&
-                                            std::abs(r.cx - id0.cx) < 0.001f &&
-                                            std::abs(r.cy - id0.cy) < 0.001f;
+                                            std::abs(r.cx - id0.result.cx) < 0.001f &&
+                                            std::abs(r.cy - id0.result.cy) < 0.001f;
                                     }
                                 );
                                 filteredResults.erase(it, filteredResults.end());

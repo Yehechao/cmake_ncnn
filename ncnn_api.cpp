@@ -35,16 +35,6 @@ const char* make_error_json(const std::string& msg) {
     return g_last_json.c_str();
 }
 
-std::vector<std::vector<float>> flat_to_2d(const float* flat_data, int rows, int cols) {
-    std::vector<std::vector<float>> data(rows, std::vector<float>(cols, 0.0f));
-    for (int r = 0; r < rows; ++r) {
-        for (int c = 0; c < cols; ++c) {
-            data[r][c] = flat_data[r * cols + c];
-        }
-    }
-    return data;
-}
-
 bool validate_flat_data(const float* flat_data, int rows, int cols) {
     return flat_data != nullptr && rows > 0 && cols > 0;
 }
@@ -124,9 +114,8 @@ extern "C" NCNN_API const char* ncnnapi_run_obb(const float* flat_data, int rows
         return make_error_json("invalid flat_data, rows or cols");
     }
 
-    std::vector<std::vector<float>> heatmap_data = flat_to_2d(flat_data, rows, cols);
     std::vector<HeatmapResult> detections;
-    const bool success = g_obb_model->run(detections, heatmap_data, true, 0.03f);
+    const bool success = g_obb_model->run(detections, flat_data, rows, cols, true, 0.03f);
     return build_result_json(detections, success);
 }
 
@@ -142,8 +131,7 @@ extern "C" NCNN_API bool ncnnapi_run_cls(const float* flat_data,
         return false;
     }
 
-    std::vector<std::vector<float>> heatmap_data = flat_to_2d(flat_data, rows, cols);
-    const ClassifyResult result = g_cls_model->runCls(heatmap_data, true, 0.03f);
+    const ClassifyResult result = g_cls_model->runCls(flat_data, rows, cols, true, 0.03f);
     *class_id = result.classId;
     *confidence = result.confidence;
     return true;
@@ -161,10 +149,9 @@ extern "C" NCNN_API bool ncnnapi_forward(const float* flat_data,
         return false;
     }
 
-    std::vector<std::vector<float>> heatmap_data = flat_to_2d(flat_data, rows, cols);
     std::vector<HeatmapResult> obb_output;
     ClassifyResult cls_output;
-    const bool success = g_obb_model->forward(g_cls_model, heatmap_data, obb_output, cls_output, true, 0.03f);
+    const bool success = g_obb_model->forward(g_cls_model, flat_data, rows, cols, obb_output, cls_output, true, 0.03f);
     *class_id = cls_output.classId;
     *confidence = cls_output.confidence;
     build_result_json(obb_output, success);

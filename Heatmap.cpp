@@ -97,6 +97,28 @@ cv::Mat YoloNcnn::prepareHeatmap(const std::vector<std::vector<float>>& heatmapD
     return heatmap;
 }
 
+cv::Mat YoloNcnn::prepareHeatmap(const float* flatData,
+    int rows, int cols,
+    bool denoise, float threshold) {
+
+    if (!flatData || rows <= 0 || cols <= 0) {
+        return cv::Mat();
+    }
+
+    cv::Mat heatmap(rows, cols, CV_32FC1);
+    std::memcpy(heatmap.data, flatData, static_cast<size_t>(rows) * static_cast<size_t>(cols) * sizeof(float));
+
+    if (denoise) {
+        double currentMaxVal;
+        cv::minMaxLoc(heatmap, nullptr, &currentMaxVal);
+        float thresholdValue = static_cast<float>(threshold * currentMaxVal);
+        cv::threshold(heatmap, heatmap, thresholdValue, 0, cv::THRESH_TOZERO);
+        cv::medianBlur(heatmap, heatmap, 3);
+    }
+
+    return heatmap;
+}
+
 cv::Mat YoloNcnn::processHeatmapData(const std::vector<std::vector<float>>& heatmapData2D,
     bool denoise, float threshold, int scale) {
 
@@ -133,6 +155,40 @@ cv::Mat YoloNcnn::processHeatmapData(const std::vector<std::vector<float>>& heat
     colorImage.setTo(cv::Vec3b(255, 255, 255), mask);
 
     // 放大图像
+    cv::Mat enlargedImage;
+    cv::resize(colorImage, enlargedImage, cv::Size(cols * scale, rows * scale),
+        0, 0, cv::INTER_NEAREST);
+    return enlargedImage;
+}
+
+cv::Mat YoloNcnn::processHeatmapData(const float* flatData,
+    int rows, int cols,
+    bool denoise, float threshold, int scale) {
+
+    cv::Mat heatmap = prepareHeatmap(flatData, rows, cols, denoise, threshold);
+    if (heatmap.empty()) {
+        return cv::Mat();
+    }
+
+    cv::Mat normalizedForColormap;
+    double maxVal;
+    cv::minMaxLoc(heatmap, nullptr, &maxVal);
+
+    if (maxVal > 0) {
+        normalizedForColormap = heatmap / maxVal;
+    }
+    else {
+        normalizedForColormap = cv::Mat::zeros(rows, cols, CV_32F);
+    }
+
+    cv::Mat heatmap8U;
+    normalizedForColormap.convertTo(heatmap8U, CV_8UC1, 255.0);
+
+    cv::Mat colorImage = applyHeatmapColormap(heatmap8U);
+
+    cv::Mat mask = (heatmap8U == 0);
+    colorImage.setTo(cv::Vec3b(255, 255, 255), mask);
+
     cv::Mat enlargedImage;
     cv::resize(colorImage, enlargedImage, cv::Size(cols * scale, rows * scale),
         0, 0, cv::INTER_NEAREST);

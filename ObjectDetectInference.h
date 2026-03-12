@@ -37,6 +37,12 @@ public:
              const std::vector<std::vector<float>>& heatmapData2D,
              bool denoise = true,
              float threshold = 0.03f);
+    bool run(std::vector<HeatmapResult>& output,
+             const float* flatData,
+             int rows,
+             int cols,
+             bool denoise = true,
+             float threshold = 0.03f);
 
     // 绘制热力图检测结果
     void drawPredOnHeatmap(cv::Mat& img, const std::vector<HeatmapResult>& result);
@@ -83,9 +89,22 @@ public:
                  ClassifyResult& clsOutput,
                  bool denoise = true,
                  float threshold = 0.03f);
+    bool forward(std::shared_ptr<YoloNcnn> clsModel,
+                 const float* flatData,
+                 int rows,
+                 int cols,
+                 std::vector<HeatmapResult>& obbOutput,
+                 ClassifyResult& clsOutput,
+                 bool denoise = true,
+                 float threshold = 0.03f);
 
     // 分类推理
     ClassifyResult runCls(const std::vector<std::vector<float>>& heatmapData2D,
+                          bool denoise = true,
+                          float threshold = 0.03f);
+    ClassifyResult runCls(const float* flatData,
+                          int rows,
+                          int cols,
                           bool denoise = true,
                           float threshold = 0.03f);
 
@@ -112,11 +131,22 @@ private:
                                bool denoise = true,
                                float threshold = 0.03f,
                                int scale = 10);
+    cv::Mat processHeatmapData(const float* flatData,
+                               int rows,
+                               int cols,
+                               bool denoise = true,
+                               float threshold = 0.03f,
+                               int scale = 10);
 
     cv::Mat applyHeatmapColormap(const cv::Mat& heatmap);
 
     // 公共热力图预处理（数据转换+去噪）
     cv::Mat prepareHeatmap(const std::vector<std::vector<float>>& heatmapData2D,
+                           bool denoise = true,
+                           float threshold = 0.03f);
+    cv::Mat prepareHeatmap(const float* flatData,
+                           int rows,
+                           int cols,
                            bool denoise = true,
                            float threshold = 0.03f);
 

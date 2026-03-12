@@ -258,6 +258,47 @@ bool YoloNcnn::run(std::vector<HeatmapResult>& output,
     return !output.empty();
 }
 
+bool YoloNcnn::run(std::vector<HeatmapResult>& output,
+    const float* flatData,
+    int rows,
+    int cols,
+    bool denoise,
+    float threshold) {
+    output.clear();
+
+    if (!flatData || rows <= 0 || cols <= 0) {
+        return false;
+    }
+
+    m_heatmapCols = cols;
+    cv::Mat heatmapImage = processHeatmapData(flatData, rows, cols, denoise, threshold);
+    if (heatmapImage.empty()) {
+        return false;
+    }
+
+    float scale = std::min((float)m_netWidth / heatmapImage.cols,
+                           (float)m_netHeight / heatmapImage.rows);
+    int new_w = std::max(1, static_cast<int>(heatmapImage.cols * scale + 0.5f));
+    int new_h = std::max(1, static_cast<int>(heatmapImage.rows * scale + 0.5f));
+    int wpad = m_netWidth - new_w;
+    int hpad = m_netHeight - new_h;
+    cv::Vec4d param(scale, scale, wpad / 2, hpad / 2);
+
+    const float* outputData = nullptr;
+    size_t outputSize = 0;
+    if (!runInference(heatmapImage, outputData, outputSize)) {
+        return false;
+    }
+
+    if (outputData == nullptr || outputSize == 0) {
+        std::cerr << "推理结果为空" << std::endl;
+        return false;
+    }
+
+    postprocessHeatmap(output, const_cast<float*>(outputData), param);
+    return !output.empty();
+}
+
 // ========== 融合推理：OBB检测 + 姿势分类 ==========
 bool YoloNcnn::forward(
     std::shared_ptr<YoloNcnn> clsModel,
@@ -269,6 +310,25 @@ bool YoloNcnn::forward(
 
     if (clsModel && clsModel->m_isClassifier) {
         clsOutput = clsModel->runCls(heatmapData2D, denoise, threshold);
+    } else {
+        clsOutput = ClassifyResult();
+    }
+
+    return obbSuccess;
+}
+
+bool YoloNcnn::forward(
+    std::shared_ptr<YoloNcnn> clsModel,
+    const float* flatData,
+    int rows,
+    int cols,
+    std::vector<HeatmapResult>& obbOutput,
+    ClassifyResult& clsOutput,
+    bool denoise, float threshold) {
+    const bool obbSuccess = run(obbOutput, flatData, rows, cols, denoise, threshold);
+
+    if (clsModel && clsModel->m_isClassifier) {
+        clsOutput = clsModel->runCls(flatData, rows, cols, denoise, threshold);
     } else {
         clsOutput = ClassifyResult();
     }
