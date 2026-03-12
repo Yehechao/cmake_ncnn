@@ -3,8 +3,11 @@
 #include <fstream>
 #include <sstream>
 #include <unordered_set>
-#ifndef __EMSCRIPTEN__
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
 #include <filesystem>
+#endif
+#if defined(__ANDROID__)
+#include <ncnn/gpu.h>
 #endif
 #include <algorithm>
 #include <thread>
@@ -22,6 +25,33 @@ int getRecommendedThreadCount() {
     }
     return threads;
 }
+
+int resolveThreadCount(int requestedThreads) {
+    if (requestedThreads <= 0) {
+        return getRecommendedThreadCount();
+    }
+    return std::max(1, requestedThreads);
+}
+
+#if defined(__ANDROID__)
+struct VulkanRuntime {
+    VulkanRuntime() {
+        ncnn::create_gpu_instance();
+        gpu_count = ncnn::get_gpu_count();
+    }
+
+    ~VulkanRuntime() {
+        ncnn::destroy_gpu_instance();
+    }
+
+    int gpu_count = 0;
+};
+
+VulkanRuntime& getVulkanRuntime() {
+    static VulkanRuntime runtime;
+    return runtime;
+}
+#endif
 }
  
 // YoloNcnn 构造函数
@@ -31,6 +61,7 @@ YoloNcnn::YoloNcnn(int netWidth, int netHeight)
     m_confidenceThreshold(0.25f),
     m_nmsThreshold(0.45f),
     m_isClassifier(false),
+    m_useVulkanCompute(false),
     m_heatmapCols(64) {
 
     // 初始化精确颜色映射表
@@ -42,12 +73,20 @@ YoloNcnn::~YoloNcnn() {
     m_net.clear();
 }
 
+bool YoloNcnn::shouldUseVulkan() {
+#if defined(__ANDROID__)
+    return getVulkanRuntime().gpu_count > 0;
+#else
+    return false;
+#endif
+}
+
 
 std::shared_ptr<YoloNcnn> YoloNcnn::load_obb(
     const std::string& paramPath, const std::string& binPath,
-    int size, float conf, float iou) {
+    int size, float conf, float iou, bool preferGpu, int numThreads) {
     
-#ifndef __EMSCRIPTEN__
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
     // 检查模型文件是否存在
     if (!std::filesystem::exists(paramPath)) {
         std::cerr << "模型param文件不存在: " << paramPath << std::endl;
@@ -63,7 +102,7 @@ std::shared_ptr<YoloNcnn> YoloNcnn::load_obb(
     detector->m_confidenceThreshold = conf;
     detector->m_nmsThreshold = iou;
 
-    if (!detector->initialize(paramPath, binPath)) {
+    if (!detector->initialize(paramPath, binPath, preferGpu, numThreads)) {
         std::cerr << "模型初始化失败" << std::endl;
         return nullptr;
     }
@@ -71,13 +110,16 @@ std::shared_ptr<YoloNcnn> YoloNcnn::load_obb(
     return detector;
 }
 
-bool YoloNcnn::initialize(const std::string& paramPath, const std::string& binPath) {
+bool YoloNcnn::initialize(const std::string& paramPath, const std::string& binPath, bool preferGpu, int numThreads) {
     try {
-        int num_cores = getRecommendedThreadCount();
-        
+        int num_cores = resolveThreadCount(numThreads);
+        m_useVulkanCompute = preferGpu && shouldUseVulkan();
+
         m_net.opt.num_threads = num_cores;
+        m_net.opt.use_vulkan_compute = m_useVulkanCompute;
         m_net.opt.use_fp16_packed = true;      // FP16 打包优化
         m_net.opt.use_fp16_storage = true;     // FP16 存储优化
+        m_net.opt.use_fp16_arithmetic = m_useVulkanCompute;
         m_net.opt.use_packing_layout = true;   // 使用打包布局优化
         m_net.opt.lightmode = true;            // 轻量模式，减少内存占用
         
@@ -97,7 +139,10 @@ bool YoloNcnn::initialize(const std::string& paramPath, const std::string& binPa
         
         std::cout << "NCNN OBB模型初始化成功!" << std::endl;
         std::cout << "  输入尺寸: " << m_netWidth << "x" << m_netHeight << std::endl;
-        std::cout << "  线程数: " << num_cores << std::endl;
+        std::cout << "  线程数: " << num_cores
+                  << (numThreads > 0 ? " (manual)" : " (auto)") << std::endl;
+        std::cout << "  Vulkan: " << (m_useVulkanCompute ? "ON" : "OFF") << std::endl;
+        std::cout << "  GPU preference: " << (preferGpu ? "ON" : "OFF") << std::endl;
 
         return true;
     }
@@ -179,49 +224,6 @@ bool YoloNcnn::runInference(const cv::Mat& inputImg, const float*& outputData, s
 }
 
 bool YoloNcnn::run(std::vector<HeatmapResult>& output,
-    std::vector<HeatmapResult>& drawOutput,
-    const std::vector<std::vector<float>>& heatmapData2D,
-    bool denoise, float threshold) {
-
-    output.clear();
-    drawOutput.clear();
-
-    if (heatmapData2D.empty()) {
-        return false;
-    }
-
-    m_heatmapCols = static_cast<int>(heatmapData2D[0].size());
-    cv::Mat heatmapImage = processHeatmapData(heatmapData2D, denoise, threshold);
-    
-    // 计算 letterbox 参数（供后处理坐标还原使用）
-    float scale = std::min((float)m_netWidth / heatmapImage.cols, 
-                          (float)m_netHeight / heatmapImage.rows);
-    int new_w = std::max(1, static_cast<int>(heatmapImage.cols * scale + 0.5f));
-    int new_h = std::max(1, static_cast<int>(heatmapImage.rows * scale + 0.5f));
-    int wpad = m_netWidth - new_w;
-    int hpad = m_netHeight - new_h;
-    cv::Vec4d param(scale, scale, wpad / 2, hpad / 2);
-
-    // 推理（已内置 letterbox 处理）
-    const float* outputData = nullptr;
-    size_t outputSize = 0;
-    if (!runInference(heatmapImage, outputData, outputSize)) {
-        return false;
-    }
-
-    // 安全检查：防止空数据
-    if (outputData == nullptr || outputSize == 0) {
-        std::cerr << "推理结果为空" << std::endl;
-        return false;
-    }
-
-    // 后处理
-    postprocessHeatmap(output, &drawOutput, const_cast<float*>(outputData), param);
-
-    return !output.empty();
-}
-
-bool YoloNcnn::run(std::vector<HeatmapResult>& output,
     const std::vector<std::vector<float>>& heatmapData2D,
     bool denoise, float threshold) {
     output.clear();
@@ -252,8 +254,7 @@ bool YoloNcnn::run(std::vector<HeatmapResult>& output,
         return false;
     }
 
-    // 仅返回检测结果，避免无意义的 drawOutput 拷贝
-    postprocessHeatmap(output, nullptr, const_cast<float*>(outputData), param);
+    postprocessHeatmap(output, const_cast<float*>(outputData), param);
     return !output.empty();
 }
 
@@ -262,30 +263,15 @@ bool YoloNcnn::forward(
     std::shared_ptr<YoloNcnn> clsModel,
     const std::vector<std::vector<float>>& heatmapData2D,
     std::vector<HeatmapResult>& obbOutput,
-    std::vector<HeatmapResult>& drawOutput,
     ClassifyResult& clsOutput,
     bool denoise, float threshold) {
+    const bool obbSuccess = run(obbOutput, heatmapData2D, denoise, threshold);
 
-    // 1. 执行 OBB 检测
-    bool obbSuccess = run(obbOutput, drawOutput, heatmapData2D, denoise, threshold);
-
-    // 2. 执行分类推理（如果分类模型有效）
     if (clsModel && clsModel->m_isClassifier) {
         clsOutput = clsModel->runCls(heatmapData2D, denoise, threshold);
     } else {
-        // 分类模型无效时，返回默认值
         clsOutput = ClassifyResult();
     }
 
     return obbSuccess;
-}
-
-bool YoloNcnn::forward(
-    std::shared_ptr<YoloNcnn> clsModel,
-    const std::vector<std::vector<float>>& heatmapData2D,
-    std::vector<HeatmapResult>& obbOutput,
-    ClassifyResult& clsOutput,
-    bool denoise, float threshold) {
-    std::vector<HeatmapResult> drawOutputIgnored;
-    return forward(clsModel, heatmapData2D, obbOutput, drawOutputIgnored, clsOutput, denoise, threshold);
 }

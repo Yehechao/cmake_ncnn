@@ -2,60 +2,38 @@
     "version": 4,
     "configurations": [
         {
-            "name": "Win32",
-            "intelliSenseMode": "windows-msvc-x64",
-            "compilerPath": "D:/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/cl.exe",
-            "cStandard": "c17",
-            "cppStandard": "c++17",
-            "includePath": [
-                "${workspaceFolder}",
-                "D:/yhc_code/emsdk-5.0.0/upstream/emscripten/system/include",
-                "D:/yhc_code/emsdk-5.0.0/upstream/emscripten/system/libcxx/include",
-                "D:/yhc_code/emsdk-5.0.0/upstream/emscripten/system/libcxxabi/include",
-                "${workspaceFolder}/ncnn_3rdpart/ncnn-20260113-windows-vs2022/x64/include",
-                "${workspaceFolder}/ncnn_3rdpart/ncnn-20260113-windows-vs2022/x64/include/ncnn",
-                "${workspaceFolder}/ncnn_3rdpart/opencv/build/include"
+            "name": "Android-arm64",
+            "intelliSenseMode": "linux-clang-arm64",
+            "compilerPath": "D:/software/AndroidStudioSDK/ndk/29.0.14206865/toolchains/llvm/prebuilt/windows-x86_64/bin/clang++.exe",
+            "compilerArgs": [
+                "--target=aarch64-none-linux-android31",
+                "--sysroot=D:/software/AndroidStudioSDK/ndk/29.0.14206865/toolchains/llvm/prebuilt/windows-x86_64/sysroot"
             ],
-            "browse": {
-                "path": [
-                    "${workspaceFolder}",
-                    "D:/yhc_code/emsdk-5.0.0/upstream/emscripten/system/include",
-                    "D:/yhc_code/emsdk-5.0.0/upstream/emscripten/system/libcxx/include",
-                    "D:/yhc_code/emsdk-5.0.0/upstream/emscripten/system/libcxxabi/include",
-                    "${workspaceFolder}/ncnn_3rdpart/ncnn-20260113-windows-vs2022/x64/include",
-                    "${workspaceFolder}/ncnn_3rdpart/ncnn-20260113-windows-vs2022/x64/include/ncnn",
-                    "${workspaceFolder}/ncnn_3rdpart/opencv/build/include"
-                ],
-                "limitSymbolsToIncludedHeaders": true
-            }
-        },
-        {
-            "name": "Emscripten",
-            "intelliSenseMode": "clang-x64",
-            "compilerPath": "D:/yhc_code/emsdk-5.0.0/em++.bat",
             "cStandard": "c17",
             "cppStandard": "c++17",
             "defines": [
-                "__EMSCRIPTEN__"
+                "__ANDROID__",
+                "ANDROID",
+                "NCNN_API_JNI_CLASS_NAME=\\\"matrix_ncnn/app/NcnnApi\\\""
             ],
             "includePath": [
                 "${workspaceFolder}",
-                "D:/yhc_code/emsdk-5.0.0/upstream/emscripten/system/include",
-                "D:/yhc_code/emsdk-5.0.0/upstream/emscripten/system/libcxx/include",
-                "D:/yhc_code/emsdk-5.0.0/upstream/emscripten/system/libcxxabi/include",
-                "${workspaceFolder}/ncnn_3rdpart/ncnn-20260113-windows-vs2022/x64/include",
-                "${workspaceFolder}/ncnn_3rdpart/ncnn-20260113-windows-vs2022/x64/include/ncnn",
-                "${workspaceFolder}/ncnn_3rdpart/opencv/build/include"
+                "D:/software/AndroidStudioSDK/ndk/29.0.14206865/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include",
+                "D:/software/AndroidStudioSDK/ndk/29.0.14206865/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/aarch64-linux-android",
+                "D:/software/AndroidStudioSDK/ndk/29.0.14206865/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1",
+                "${workspaceFolder}/ncnn_3rdpart/ncnn-20260113-android-vulkan/arm64-v8a/include",
+                "${workspaceFolder}/ncnn_3rdpart/ncnn-20260113-android-vulkan/arm64-v8a/include/ncnn",
+                "${workspaceFolder}/ncnn_3rdpart/opencv-mobile-4.8.0-android/sdk/native/jni/include"
             ],
             "browse": {
                 "path": [
                     "${workspaceFolder}",
-                    "D:/yhc_code/emsdk-5.0.0/upstream/emscripten/system/include",
-                    "D:/yhc_code/emsdk-5.0.0/upstream/emscripten/system/libcxx/include",
-                    "D:/yhc_code/emsdk-5.0.0/upstream/emscripten/system/libcxxabi/include",
-                    "${workspaceFolder}/ncnn_3rdpart/ncnn-20260113-windows-vs2022/x64/include",
-                    "${workspaceFolder}/ncnn_3rdpart/ncnn-20260113-windows-vs2022/x64/include/ncnn",
-                    "${workspaceFolder}/ncnn_3rdpart/opencv/build/include"
+                    "D:/software/AndroidStudioSDK/ndk/29.0.14206865/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include",
+                    "D:/software/AndroidStudioSDK/ndk/29.0.14206865/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/aarch64-linux-android",
+                    "D:/software/AndroidStudioSDK/ndk/29.0.14206865/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1",
+                    "${workspaceFolder}/ncnn_3rdpart/ncnn-20260113-android-vulkan/arm64-v8a/include",
+                    "${workspaceFolder}/ncnn_3rdpart/ncnn-20260113-android-vulkan/arm64-v8a/include/ncnn",
+                    "${workspaceFolder}/ncnn_3rdpart/opencv-mobile-4.8.0-android/sdk/native/jni/include"
                 ],
                 "limitSymbolsToIncludedHeaders": true
             }

@@ -1,7 +1,4 @@
 *.dll
 /data
-
-/ncnn_3rdpart/ncnn-20260113-windows-vs2022
-/ncnn_3rdpart/opencv
-/ncnn_3rdpart/opencv_wasm_build
-wasm/build
+/ncnn_3rdpart/
+/ncnn_3rdpart/

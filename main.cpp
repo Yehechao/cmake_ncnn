@@ -154,12 +154,11 @@ int main() {
 
             // 读取热力图txt数据（32x64）
             vector<vector<float>> heatmapData2D = readTxtFile(filePath);
-            vector<HeatmapResult> obbResults;   // 后处理后的检测结果（含历史追踪）
-            vector<HeatmapResult> drawResults;   // 用于绘图的结果（追踪前）
+            vector<HeatmapResult> obbResults;   // 后处理后的检测结果
 
             // 推理计时
             auto start_forward = high_resolution_clock::now();
-            bool success = model->run(obbResults, drawResults, heatmapData2D);
+            bool success = model->run(obbResults, heatmapData2D);
             auto end_forward = high_resolution_clock::now();
             auto forwardDuration = duration_cast<microseconds>(end_forward - start_forward);
             cout << " [" << fileIndex + 1 << "/" << txtFiles.size() << "] 推理耗时: " << forwardDuration.count() / 1000.0 << " ms" << endl;
@@ -167,10 +166,10 @@ int main() {
             // 生成热力图可视化并绘制检测结果
             cv::Mat heatmapImg = model->createHeatmapImageFromData(heatmapData2D, true, 0.03);
 
-            // 此行代码注释，解开下方drawPredOnHeatmap(heatmapImg, drawResults)可以去除轮廓提取，画方框蒙版
+            // 此行代码注释，解开下方 drawPredOnHeatmap(heatmapImg, obbResults) 可以去除轮廓提取，画方框蒙版
             auto contours = model->extractContours(heatmapData2D, 10);  
-            // 提取热力图轮廓model->drawPredOnHeatmap(heatmapImg, drawResults, contours);
-            // model->drawPredOnHeatmap(heatmapImg, drawResults)
+            // 提取热力图轮廓 model->drawPredOnHeatmap(heatmapImg, obbResults, contours);
+            // model->drawPredOnHeatmap(heatmapImg, obbResults)
             // 保存结果图片
             createOutputFolder(output_folder);
             fs::path outPath = fs::path(output_folder) / (baseName + ".jpg");
@@ -201,13 +200,12 @@ int main() {
 
             // 读取热力图txt数据（32x64）
             vector<vector<float>> heatmapData2D = readTxtFile(filePath);
-            vector<HeatmapResult> obbResults;   // 后处理后的检测结果（含历史追踪）
-            vector<HeatmapResult> drawResults;   // 用于绘图的结果（追踪前）
+            vector<HeatmapResult> obbResults;   // 后处理后的检测结果
             ClassifyResult poseResult;           // 睡姿分类结果
 
             // 推理计时：OBB检测 + 睡姿分类 + 轮廓提取
             auto start_forward = high_resolution_clock::now();
-            bool success = model->forward(clsModel, heatmapData2D, obbResults, drawResults, poseResult, true, 0.03f);
+            bool success = model->forward(clsModel, heatmapData2D, obbResults, poseResult, true, 0.03f);
             auto contours = model->extractContours(heatmapData2D, 10);  // 提取热力图轮廓
             auto end_forward = high_resolution_clock::now();
             auto forwardDuration = duration_cast<microseconds>(end_forward - start_forward);
@@ -219,7 +217,7 @@ int main() {
             cv::Mat heatmapImg = model->createHeatmapImageFromData(heatmapData2D, true, 0.03);
             if (!heatmapImg.empty()) {
 
-                model->drawPredOnHeatmap(heatmapImg, drawResults, heatmapData2D, contours);
+                model->drawPredOnHeatmap(heatmapImg, obbResults, heatmapData2D, contours);
                 // 在图像上标注睡姿
                 string poseLabel = "Pose: " + string(getPoseName(poseResult.classId)) +
                     " (" + to_string(poseResult.classId) + ")";

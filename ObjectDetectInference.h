@@ -6,7 +6,7 @@
 #include <numeric>
 #include <string>
 #include <vector>
-#include <net.h>
+#include <ncnn/net.h>
 #include <opencv2/opencv.hpp>
 #include "utils.h"
 
@@ -18,22 +18,19 @@ public:
         const std::string& binPath,
         int size,
         float conf = 0.25f,
-        float iou = 0.45f);
+        float iou = 0.45f,
+        bool preferGpu = false,
+        int numThreads = -1);
 
     // 加载分类模型
     static std::shared_ptr<YoloNcnn> load_cls(
         const std::string& paramPath,
         const std::string& binPath,
-        int size);
+        int size,
+        bool preferGpu = false,
+        int numThreads = -1);
 
     ~YoloNcnn();
-
-    // OBB 推理：同时返回检测结果与绘图结果
-    bool run(std::vector<HeatmapResult>& output,
-             std::vector<HeatmapResult>& drawOutput,
-             const std::vector<std::vector<float>>& heatmapData2D,
-             bool denoise = true,
-             float threshold = 0.03f);
 
     // OBB 推理：仅返回一份检测结果（更轻量）
     bool run(std::vector<HeatmapResult>& output,
@@ -73,19 +70,11 @@ public:
     // 获取网络信息
     int getNetWidth() const { return m_netWidth; }
     int getNetHeight() const { return m_netHeight; }
+    bool isUsingVulkan() const { return m_useVulkanCompute; }
 
     // 设置阈值
     void setConfidenceThreshold(float conf) { m_confidenceThreshold = conf; }
     void setNMSThreshold(float iou) { m_nmsThreshold = iou; }
-
-    // 融合推理：OBB + 分类
-    bool forward(std::shared_ptr<YoloNcnn> clsModel,
-                 const std::vector<std::vector<float>>& heatmapData2D,
-                 std::vector<HeatmapResult>& obbOutput,
-                 std::vector<HeatmapResult>& drawOutput,
-                 ClassifyResult& clsOutput,
-                 bool denoise = true,
-                 float threshold = 0.03f);
 
     // 融合推理兼容接口：仅返回 OBB + 分类
     bool forward(std::shared_ptr<YoloNcnn> clsModel,
@@ -106,15 +95,15 @@ private:
     YoloNcnn& operator=(const YoloNcnn&) = delete;
 
     // 初始化
-    bool initialize(const std::string& paramPath, const std::string& binPath);
-    bool initializeCls(const std::string& paramPath, const std::string& binPath);
+    bool initialize(const std::string& paramPath, const std::string& binPath, bool preferGpu, int numThreads);
+    bool initializeCls(const std::string& paramPath, const std::string& binPath, bool preferGpu, int numThreads);
+    static bool shouldUseVulkan();
 
     // 通用推理执行（直接返回输出张量指针，避免拷贝）
     bool runInference(const cv::Mat& inputImg, const float*& outputData, size_t& outputSize);
 
     // 后处理（热力图）
     void postprocessHeatmap(std::vector<HeatmapResult>& output,
-                            std::vector<HeatmapResult>* drawOutput,
                             float* data,
                             const cv::Vec4d& param);
 
@@ -171,6 +160,7 @@ private:
     float m_confidenceThreshold;
     float m_nmsThreshold;
     bool m_isClassifier;
+    bool m_useVulkanCompute;
 
     // NCNN
     ncnn::Net m_net;

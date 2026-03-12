@@ -1,7 +1,8 @@
 ﻿#include "ObjectDetectInference.h"
 #include <iostream>
 #include <thread>
-#ifndef __EMSCRIPTEN__
+#include <algorithm>
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
 #include <filesystem>
 #endif
 
@@ -18,13 +19,20 @@ int getRecommendedThreadCount() {
     }
     return threads;
 }
+
+int resolveThreadCount(int requestedThreads) {
+    if (requestedThreads <= 0) {
+        return getRecommendedThreadCount();
+    }
+    return std::max(1, requestedThreads);
+}
 }
 
 std::shared_ptr<YoloNcnn> YoloNcnn::load_cls(
     const std::string& paramPath, const std::string& binPath,
-    int size) {
+    int size, bool preferGpu, int numThreads) {
 
-#ifndef __EMSCRIPTEN__
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
     if (!std::filesystem::exists(paramPath)) {
         std::cerr << "classification param file not found: " << paramPath << std::endl;
         return nullptr;
@@ -38,7 +46,7 @@ std::shared_ptr<YoloNcnn> YoloNcnn::load_cls(
     std::shared_ptr<YoloNcnn> classifier(new YoloNcnn(size, size));
     classifier->m_isClassifier = true;
 
-    if (!classifier->initializeCls(paramPath, binPath)) {
+    if (!classifier->initializeCls(paramPath, binPath, preferGpu, numThreads)) {
         std::cerr << "classification model initialize failed" << std::endl;
         return nullptr;
     }
@@ -46,13 +54,16 @@ std::shared_ptr<YoloNcnn> YoloNcnn::load_cls(
     return classifier;
 }
 
-bool YoloNcnn::initializeCls(const std::string& paramPath, const std::string& binPath) {
+bool YoloNcnn::initializeCls(const std::string& paramPath, const std::string& binPath, bool preferGpu, int numThreads) {
     try {
-        int num_cores = getRecommendedThreadCount();
+        int num_cores = resolveThreadCount(numThreads);
+        m_useVulkanCompute = preferGpu && shouldUseVulkan();
 
         m_net.opt.num_threads = num_cores;
+        m_net.opt.use_vulkan_compute = m_useVulkanCompute;
         m_net.opt.use_fp16_packed = true;
         m_net.opt.use_fp16_storage = true;
+        m_net.opt.use_fp16_arithmetic = m_useVulkanCompute;
         m_net.opt.use_packing_layout = true;
         m_net.opt.lightmode = true;
 
@@ -71,7 +82,10 @@ bool YoloNcnn::initializeCls(const std::string& paramPath, const std::string& bi
 
         std::cout << "NCNN classification model initialized." << std::endl;
         std::cout << "  input size: " << m_netWidth << "x" << m_netHeight << std::endl;
-        std::cout << "  threads: " << num_cores << std::endl;
+        std::cout << "  threads: " << num_cores
+                  << (numThreads > 0 ? " (manual)" : " (auto)") << std::endl;
+        std::cout << "  Vulkan: " << (m_useVulkanCompute ? "ON" : "OFF") << std::endl;
+        std::cout << "  GPU preference: " << (preferGpu ? "ON" : "OFF") << std::endl;
 
         return true;
     }

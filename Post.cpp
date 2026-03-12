@@ -283,14 +283,10 @@ void YoloNcnn::filterMaxOnePerClassHeatmap(std::vector<HeatmapResult>& results) 
 }
 
 void YoloNcnn::postprocessHeatmap(std::vector<HeatmapResult>& output,
-    std::vector<HeatmapResult>* drawOutput,
     float* data,
     const cv::Vec4d& param) {
 
     output.clear();
-    if (drawOutput) {
-        drawOutput->clear();
-    }
 
     int netWidth = static_cast<int>(m_outputShape[1]);
     int numClasses = netWidth - 5;
@@ -775,11 +771,6 @@ void YoloNcnn::postprocessHeatmap(std::vector<HeatmapResult>& output,
             result.l = result.l * scale_x;
             result.s = result.s * scale_y;
         }
-        // 画图结果：与当前后处理结果一致
-        if (drawOutput) {
-            *drawOutput = output;
-        }
-
         // 删除所有id4的结果（暂时不需要输出）
        /* output.erase(
             std::remove_if(output.begin(), output.end(),
