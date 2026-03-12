@@ -31,6 +31,22 @@ if(ANDROID)
 
     add_library(${PROJECT_NAME} SHARED ${SOURCES} ${HEADERS} android_api.h)
 
+    set_target_properties(${PROJECT_NAME} PROPERTIES
+        CXX_VISIBILITY_PRESET hidden
+        VISIBILITY_INLINES_HIDDEN YES
+    )
+
+    target_compile_options(${PROJECT_NAME} PRIVATE
+        $<$<CONFIG:Release>:-O3>
+        $<$<CONFIG:Release>:-DNDEBUG>
+        $<$<CONFIG:Release>:-ffunction-sections>
+        $<$<CONFIG:Release>:-fdata-sections>
+    )
+
+    target_link_options(${PROJECT_NAME} PRIVATE
+        $<$<CONFIG:Release>:-Wl,--gc-sections>
+    )
+
     set(NCNN_DIR ${CMAKE_SOURCE_DIR}/ncnn_3rdpart/ncnn-20260113-android-vulkan/${ANDROID_ABI})
     set(OPENCV_ANDROID_DIR ${CMAKE_SOURCE_DIR}/ncnn_3rdpart/opencv-mobile-4.8.0-android/sdk/native)
 

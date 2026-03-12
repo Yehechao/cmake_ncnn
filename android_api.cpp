@@ -34,16 +34,6 @@ const char* make_error_json(const std::string& msg) {
     return g_last_json.c_str();
 }
 
-std::vector<std::vector<float>> flat_to_2d(const float* flat_data, int rows, int cols) {
-    std::vector<std::vector<float>> data(rows, std::vector<float>(cols, 0.0f));
-    for (int r = 0; r < rows; ++r) {
-        for (int c = 0; c < cols; ++c) {
-            data[r][c] = flat_data[r * cols + c];
-        }
-    }
-    return data;
-}
-
 const char* build_result_json(const std::vector<HeatmapResult>& detections, bool success) {
     std::ostringstream oss;
     oss << "{\"success\":" << (success ? "true" : "false") << ",\"detections\":[";
@@ -107,9 +97,8 @@ extern "C" NCNN_API_EXPORT const char* ncnnapi_run_obb(const float* flat_data,
         return make_error_json("invalid rows or cols");
     }
 
-    std::vector<std::vector<float>> heatmap_data = flat_to_2d(flat_data, rows, cols);
     std::vector<HeatmapResult> detections;
-    const bool success = g_obb_model->run(detections, heatmap_data, true, 0.03f);
+    const bool success = g_obb_model->run(detections, flat_data, rows, cols, true, 0.03f);
     return build_result_json(detections, success);
 }
 
