@@ -1,4 +1,3 @@
 *.dll
 /data
-/ncnn_3rdpart/
-/ncnn_3rdpart/
+/ncnn_3rdpart
