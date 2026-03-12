@@ -7,28 +7,28 @@
 #include <opencv2/opencv.hpp>
 
 namespace {
-struct CachedRotatedRect {
-    cv::RotatedRect rect;
-    cv::Rect2f bounds;
-};
+    struct CachedRotatedRect {
+        cv::RotatedRect rect;
+        cv::Rect2f bounds;
+    };
 
-inline bool boundsOverlap(const cv::Rect2f& a, const cv::Rect2f& b) {
-    return a.x < b.x + b.width &&
-           b.x < a.x + a.width &&
-           a.y < b.y + b.height &&
-           b.y < a.y + a.height;
-}
+    inline bool boundsOverlap(const cv::Rect2f& a, const cv::Rect2f& b) {
+        return a.x < b.x + b.width &&
+            b.x < a.x + a.width &&
+            a.y < b.y + b.height &&
+            b.y < a.y + a.height;
+    }
 
-inline CachedRotatedRect makeCachedRect(const HeatmapResult& result) {
-    CachedRotatedRect cached;
-    cached.rect = cv::RotatedRect(
-        cv::Point2f(result.cx, result.cy),
-        cv::Size2f(result.l, result.s),
-        result.angle * 180.0f / CV_PI
-    );
-    cached.bounds = cached.rect.boundingRect2f();
-    return cached;
-}
+    inline CachedRotatedRect makeCachedRect(const HeatmapResult& result) {
+        CachedRotatedRect cached;
+        cached.rect = cv::RotatedRect(
+            cv::Point2f(result.cx, result.cy),
+            cv::Size2f(result.l, result.s),
+            result.angle * 180.0f / CV_PI
+        );
+        cached.bounds = cached.rect.boundingRect2f();
+        return cached;
+    }
 }
 
 // 协方差矩阵计算
@@ -414,10 +414,10 @@ void YoloNcnn::postprocessHeatmap(std::vector<HeatmapResult>& output,
             cv::RotatedRect box = boxes[idx];
 
             // 暂时不进行坐标转换，等所有处理完成后统一转换
-            result.cx = box.center.x; 
-            result.cy = box.center.y;  
-            result.l = box.size.width;  
-            result.s = box.size.height;  
+            result.cx = box.center.x;
+            result.cy = box.center.y;
+            result.l = box.size.width;
+            result.s = box.size.height;
             result.angle = box.angle * CV_PI / 180.0f;  // 角度转为弧度
 
             output.push_back(result);
@@ -697,10 +697,10 @@ void YoloNcnn::postprocessHeatmap(std::vector<HeatmapResult>& output,
 
             for (const auto& result : output) {
                 if (result.id == 0) {
-                    id0Results.push_back({result, makeCachedRect(result)});
+                    id0Results.push_back({ result, makeCachedRect(result) });
                 }
                 else if (result.id == 5) {
-                    id5Results.push_back({result, makeCachedRect(result)});
+                    id5Results.push_back({ result, makeCachedRect(result) });
                 }
             }
 

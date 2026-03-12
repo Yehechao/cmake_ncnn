@@ -145,7 +145,7 @@ int main() {
     //单独肢体检测
     if (mode == 1) {
         // 加载OBB旋转框检测模型
-        auto model = YoloNcnn::load_obb(obbParamPath, obbBinPath, imgsz_obb, 0.25, 0.45);
+        auto model = YoloNcnn::load_obb(obbParamPath, obbBinPath, imgsz_obb, 0.25, 0.45,4);
 
         for (size_t fileIndex = 0; fileIndex < txtFiles.size(); ++fileIndex) {
             string filePath = txtFiles[fileIndex];
@@ -167,7 +167,7 @@ int main() {
             cv::Mat heatmapImg = model->createHeatmapImageFromData(heatmapData2D, true, 0.03);
 
             // 此行代码注释，解开下方 drawPredOnHeatmap(heatmapImg, obbResults) 可以去除轮廓提取，画方框蒙版
-            auto contours = model->extractContours(heatmapData2D, 10);  
+            auto contours = model->extractContours(heatmapData2D, 10);
             // 提取热力图轮廓 model->drawPredOnHeatmap(heatmapImg, obbResults, contours);
             // model->drawPredOnHeatmap(heatmapImg, obbResults)
             // 保存结果图片
@@ -190,8 +190,8 @@ int main() {
     //肢体检测+睡姿检测
     else if (mode == 2) {
         // 加载分类模型（睡姿识别）和OBB检测模型
-        auto clsModel = YoloNcnn::load_cls(clsParamPath, clsBinPath, imgsz_cls);
-        auto model = YoloNcnn::load_obb(obbParamPath, obbBinPath, imgsz_obb, 0.25, 0.45);
+        auto clsModel = YoloNcnn::load_cls(clsParamPath, clsBinPath, imgsz_cls, 4);
+        auto model = YoloNcnn::load_obb(obbParamPath, obbBinPath, imgsz_obb, 0.25, 0.45, 4);
 
         for (size_t fileIndex = 0; fileIndex < txtFiles.size(); ++fileIndex) {
             string filePath = txtFiles[fileIndex];

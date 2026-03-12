@@ -201,43 +201,44 @@ cv::Mat YoloNcnn::createHeatmapImageFromData(const std::vector<std::vector<float
 std::vector<std::vector<cv::Point2f>> YoloNcnn::extractContours(
     const std::vector<std::vector<float>>& heatmapData2D,
     int threshold) {
-    
+
     std::vector<std::vector<cv::Point2f>> result;
-    
+
     // 使用公共预处理函数（去噪参数与 processHeatmapData 一致）
     cv::Mat heatmap = prepareHeatmap(heatmapData2D, true, 0.03f);
     if (heatmap.empty()) {
         return result;
     }
-    
+
     const int rows = heatmap.rows;
     const int cols = heatmap.cols;
     const int scale = 10;  // 放大倍数
-    
+
     // 归一化到 0-255 并转换为 CV_8U
     double maxVal;
     cv::minMaxLoc(heatmap, nullptr, &maxVal);
-    
+
     cv::Mat gray;
     if (maxVal > 0) {
         heatmap.convertTo(gray, CV_8UC1, 255.0 / maxVal);
-    } else {
+    }
+    else {
         return result;  // 全零热力图，无轮廓
     }
-    
+
     // 二值化
     cv::Mat binary;
     cv::threshold(gray, binary, threshold, 255, cv::THRESH_BINARY);
-    
+
     // 放大10倍
     cv::Mat binaryLarge;
-    cv::resize(binary, binaryLarge, cv::Size(cols * scale, rows * scale), 
-               0, 0, cv::INTER_NEAREST);
+    cv::resize(binary, binaryLarge, cv::Size(cols * scale, rows * scale),
+        0, 0, cv::INTER_NEAREST);
 
     //在放大后的图像上检测外轮廓
     std::vector<std::vector<cv::Point>> contours;
     cv::findContours(binaryLarge, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
-    
+
     //将轮廓坐标缩小10倍，转换回原始坐标系
     result.reserve(contours.size());
     for (const auto& contour : contours) {
@@ -251,7 +252,7 @@ std::vector<std::vector<cv::Point2f>> YoloNcnn::extractContours(
         }
         result.push_back(std::move(origContour));
     }
-    
+
     return result;
 }
 
@@ -266,11 +267,11 @@ void YoloNcnn::drawPredOnHeatmap(cv::Mat& img, const std::vector<HeatmapResult>&
     int boxThickness = 1;
     float alpha = 0.5f;
     float borderDarkenFactor = 0.6f;
-    
+
     // 转换坐标的辅助函数
     auto convertToImageCoords = [](float cx, float cy) -> cv::Point2f {
         return cv::Point2f(cx * 10.0f, cy * 10.0f);
-    };
+        };
 
     // 颜色映射
     std::map<int, cv::Scalar> colorMap = {
@@ -294,7 +295,7 @@ void YoloNcnn::drawPredOnHeatmap(cv::Mat& img, const std::vector<HeatmapResult>&
         cv::RotatedRect rotatedRect(center, size, angle);
 
         if (rotatedRect.size.width > 0 && rotatedRect.size.height > 0) {
-            cv::Scalar boxColor = (colorMap.find(r.id) != colorMap.end()) 
+            cv::Scalar boxColor = (colorMap.find(r.id) != colorMap.end())
                 ? colorMap[r.id] : cv::Scalar(128, 128, 128);
             cv::Scalar borderColor = boxColor * borderDarkenFactor;
 
@@ -319,7 +320,7 @@ void YoloNcnn::drawPredOnHeatmap(cv::Mat& img, const std::vector<HeatmapResult>&
             // 绘制ID和置信度标签
             std::ostringstream label;
             label << r.id << ":" << std::fixed << std::setprecision(2) << r.confidence;
-            
+
             // 找旋转框左上角顶点
             int topLeftIdx = 0;
             float minY = vertices[0].y;
@@ -329,28 +330,28 @@ void YoloNcnn::drawPredOnHeatmap(cv::Mat& img, const std::vector<HeatmapResult>&
                     topLeftIdx = i;
                 }
             }
-            
+
             int baseline = 0;
             double fontScale = 0.35;
             int thickness = 1;
             cv::Size textSize = cv::getTextSize(label.str(), cv::FONT_HERSHEY_SIMPLEX, fontScale, thickness, &baseline);
-            
+
             int textX = static_cast<int>(vertices[topLeftIdx].x) + 2;
             int textY = static_cast<int>(vertices[topLeftIdx].y) + textSize.height + 2;
-            
+
             textX = std::max(1, std::min(textX, drawImg.cols - textSize.width - 2));
             textY = std::max(textSize.height + 1, std::min(textY, drawImg.rows - 2));
-            
+
             cv::rectangle(drawImg,
                 cv::Point(textX - 1, textY - textSize.height - 1),
                 cv::Point(textX + textSize.width + 1, textY + baseline + 1),
                 cv::Scalar(255, 255, 255), -1);
-            
+
             cv::putText(drawImg, label.str(), cv::Point(textX, textY),
                 cv::FONT_HERSHEY_SIMPLEX, fontScale, cv::Scalar(0, 0, 0), thickness);
         }
     }
-    
+
     // 混合半透明填充层
     cv::addWeighted(overlay, alpha, drawImg, 1 - alpha, 0, drawImg);
 
@@ -363,7 +364,7 @@ void YoloNcnn::drawPredOnHeatmap(cv::Mat& img, const std::vector<HeatmapResult>&
 //带轮廓交集的绘制
 void YoloNcnn::drawPredOnHeatmap(cv::Mat& img, const std::vector<HeatmapResult>& result,
     const std::vector<std::vector<cv::Point2f>>& contours) {
-    
+
     if (img.empty()) {
         std::cerr << "输入图像为空!" << std::endl;
         return;
@@ -374,11 +375,11 @@ void YoloNcnn::drawPredOnHeatmap(cv::Mat& img, const std::vector<HeatmapResult>&
     float alpha = 0.8f;  // 不透明度 0.8
     cv::Scalar borderColor(0, 0, 0);  // 统一黑色边框
     int boxThickness = 1;
-    
+
     // 坐标转换
     auto convertToImageCoords = [](float cx, float cy) -> cv::Point2f {
         return cv::Point2f(cx * 10.0f, cy * 10.0f);
-    };
+        };
 
     // 颜色映射
     std::map<int, cv::Scalar> colorMap = {
@@ -421,13 +422,13 @@ void YoloNcnn::drawPredOnHeatmap(cv::Mat& img, const std::vector<HeatmapResult>&
         cv::RotatedRect rotatedRect(center, size, angle);
 
         if (rotatedRect.size.width > 0 && rotatedRect.size.height > 0) {
-            cv::Scalar boxColor = (colorMap.find(r.id) != colorMap.end()) 
+            cv::Scalar boxColor = (colorMap.find(r.id) != colorMap.end())
                 ? colorMap[r.id] : cv::Scalar(128, 128, 128);
 
             // 获取 OBB 四个顶点
             cv::Point2f vertices[4];
             rotatedRect.points(vertices);
-            
+
             // 将 OBB 转换为多边形
             std::vector<cv::Point> obbPoly;
             for (int i = 0; i < 4; ++i) {
@@ -439,17 +440,17 @@ void YoloNcnn::drawPredOnHeatmap(cv::Mat& img, const std::vector<HeatmapResult>&
                 // 创建 OBB 掩码
                 cv::Mat obbMask = cv::Mat::zeros(img.size(), CV_8UC1);
                 cv::fillConvexPoly(obbMask, obbPoly, cv::Scalar(255));
-                
+
                 // 计算交集掩码
                 cv::Mat intersectionMask;
                 cv::bitwise_and(obbMask, contourMask, intersectionMask);
-                
+
                 // 在 overlay 上填充交集区域
                 overlay.setTo(boxColor, intersectionMask);
             }
         }
     }
-    
+
     // 混合半透明交集填充层（alpha = 0.8）
     cv::addWeighted(overlay, alpha, drawImg, 1 - alpha, 0, drawImg);
 
@@ -465,7 +466,7 @@ void YoloNcnn::drawPredOnHeatmap(cv::Mat& img, const std::vector<HeatmapResult>&
         if (rotatedRect.size.width > 0 && rotatedRect.size.height > 0) {
             cv::Point2f vertices[4];
             rotatedRect.points(vertices);
-            
+
             // 绘制黑色边框
             for (int l = 0; l < 4; ++l) {
                 cv::line(drawImg, vertices[l], vertices[(l + 1) % 4], borderColor, boxThickness, 8);
@@ -474,7 +475,7 @@ void YoloNcnn::drawPredOnHeatmap(cv::Mat& img, const std::vector<HeatmapResult>&
             // 绘制 ID 和置信度标签
             std::ostringstream label;
             label << r.id << ":" << std::fixed << std::setprecision(2) << r.confidence;
-            
+
             int topLeftIdx = 0;
             float minY = vertices[0].y;
             for (int i = 1; i < 4; ++i) {
@@ -483,23 +484,23 @@ void YoloNcnn::drawPredOnHeatmap(cv::Mat& img, const std::vector<HeatmapResult>&
                     topLeftIdx = i;
                 }
             }
-            
+
             int baseline = 0;
             double fontScale = 0.35;
             int thickness = 1;
             cv::Size textSize = cv::getTextSize(label.str(), cv::FONT_HERSHEY_SIMPLEX, fontScale, thickness, &baseline);
-            
+
             int textX = static_cast<int>(vertices[topLeftIdx].x) + 2;
             int textY = static_cast<int>(vertices[topLeftIdx].y) + textSize.height + 2;
-            
+
             textX = std::max(1, std::min(textX, drawImg.cols - textSize.width - 2));
             textY = std::max(textSize.height + 1, std::min(textY, drawImg.rows - 2));
-            
+
             cv::rectangle(drawImg,
                 cv::Point(textX - 1, textY - textSize.height - 1),
                 cv::Point(textX + textSize.width + 1, textY + baseline + 1),
                 cv::Scalar(255, 255, 255), -1);
-            
+
             cv::putText(drawImg, label.str(), cv::Point(textX, textY),
                 cv::FONT_HERSHEY_SIMPLEX, fontScale, cv::Scalar(0, 0, 0), thickness);
         }
@@ -546,7 +547,8 @@ void YoloNcnn::drawValueGrid(cv::Mat& img, const std::vector<std::vector<float>>
             cv::Scalar textColor;
             if (intVal == 0) {
                 textColor = (brightness > 128) ? cv::Scalar(180, 180, 180) : cv::Scalar(100, 100, 100);
-            } else {
+            }
+            else {
                 textColor = (brightness > 128) ? cv::Scalar(0, 0, 0) : cv::Scalar(255, 255, 255);
             }
 
@@ -639,7 +641,8 @@ void YoloNcnn::drawSkeleton(cv::Mat& drawImg,
                 }
                 cv::line(drawImg, armPoint, closestShoulder, connectionColor, lineScale);
             }
-        } else if (trunkPoints.find(1) != trunkPoints.end()) {
+        }
+        else if (trunkPoints.find(1) != trunkPoints.end()) {
             for (const auto& arm : arms) {
                 cv::Point2f armPoint = convertCoords(arm.cx, arm.cy);
                 cv::line(drawImg, armPoint, trunkPoints[1], connectionColor, lineScale);
@@ -656,7 +659,8 @@ void YoloNcnn::drawSkeleton(cv::Mat& drawImg,
                 cv::Point2f legPoint = convertCoords(leg.cx, leg.cy);
                 cv::line(drawImg, legPoint, trunkPoints[2], connectionColor, lineScale);
             }
-        } else if (trunkPoints.find(7) != trunkPoints.end()) {
+        }
+        else if (trunkPoints.find(7) != trunkPoints.end()) {
             for (const auto& leg : legs) {
                 cv::Point2f legPoint = convertCoords(leg.cx, leg.cy);
                 cv::line(drawImg, legPoint, trunkPoints[7], connectionColor, lineScale);
@@ -686,7 +690,7 @@ void YoloNcnn::drawPredOnHeatmap(cv::Mat& img, const std::vector<HeatmapResult>&
 
     // 先绘制数值网格背景
     drawValueGrid(img, heatmapData2D, scale);
-    
+
     cv::Mat drawImg = img.clone();
     cv::Mat overlay = drawImg.clone();
     int boxThickness = 2;
@@ -695,7 +699,7 @@ void YoloNcnn::drawPredOnHeatmap(cv::Mat& img, const std::vector<HeatmapResult>&
 
     auto convertCoords = [scale](float cx, float cy) -> cv::Point2f {
         return cv::Point2f(cx * static_cast<float>(scale), cy * static_cast<float>(scale));
-    };
+        };
 
     std::map<int, cv::Scalar> colorMap = {
         {0, cv::Scalar(255, 255, 0)},   // 手臂
@@ -801,7 +805,7 @@ void YoloNcnn::drawPredOnHeatmap(cv::Mat& img, const std::vector<HeatmapResult>&
 
     auto convertCoords = [scale](float cx, float cy) -> cv::Point2f {
         return cv::Point2f(cx * static_cast<float>(scale), cy * static_cast<float>(scale));
-    };
+        };
 
     std::map<int, cv::Scalar> colorMap = {
         {0, cv::Scalar(255, 255, 0)},
@@ -823,7 +827,7 @@ void YoloNcnn::drawPredOnHeatmap(cv::Mat& img, const std::vector<HeatmapResult>&
             return partNames[id];
         }
         return "unknown";
-    };
+        };
 
     // 缩放轮廓到图像坐标
     std::vector<std::vector<cv::Point>> scaledContours;
@@ -891,7 +895,7 @@ void YoloNcnn::drawPredOnHeatmap(cv::Mat& img, const std::vector<HeatmapResult>&
 
             std::string label = getPartName(r.id);
             int baseline = 0;
-            double fScale = 0.60;  
+            double fScale = 0.60;
             int thick = 2;
             cv::Size textSize = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, fScale, thick, &baseline);
 
