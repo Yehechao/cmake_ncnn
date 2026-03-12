@@ -1,6 +1,6 @@
 {
-    "C_Cpp.default.compilerPath": "D:/software/AndroidStudioSDK/ndk/29.0.14206865/toolchains/llvm/prebuilt/windows-x86_64/bin/clang++.exe",
-    "C_Cpp.default.intelliSenseMode": "linux-clang-arm64",
+    "C_Cpp.default.compilerPath": "D:/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/cl.exe",
+    "C_Cpp.default.intelliSenseMode": "windows-msvc-x64",
     "C_Cpp.default.cStandard": "c17",
     "C_Cpp.default.cppStandard": "c++17",
     "python-envs.defaultEnvManager": "ms-python.python:conda",

@@ -33,6 +33,7 @@
             "dependsOn": [
                 "CMake Configure EXE"
             ],
+            "detail": "Build Release EXE and copy OpenCV runtime DLL to workspace root.",
             "group": {
                 "kind": "build",
                 "isDefault": true
@@ -73,6 +74,7 @@
             "dependsOn": [
                 "CMake Configure DLL"
             ],
+            "detail": "Build Release DLL and copy OpenCV runtime DLL to workspace root.",
             "problemMatcher": [
                 "$msCompile"
             ]
