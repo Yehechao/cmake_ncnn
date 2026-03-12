@@ -1,3 +1,0 @@
-D:/yhc_code/ncnn_cpu/cmake_ncnn/build_check/CMakeFiles/CMakeScratch/TryCompile-w74ke0/CMakeFiles/cmTC_a8a28.dir
-D:/yhc_code/ncnn_cpu/cmake_ncnn/build_check/CMakeFiles/CMakeScratch/TryCompile-w74ke0/CMakeFiles/edit_cache.dir
-D:/yhc_code/ncnn_cpu/cmake_ncnn/build_check/CMakeFiles/CMakeScratch/TryCompile-w74ke0/CMakeFiles/rebuild_cache.dir

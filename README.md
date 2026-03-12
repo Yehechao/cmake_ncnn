@@ -9,6 +9,21 @@ cmake --build build-android-arm64 -j8
 ```
 最后输出libncnn_api.so
 
+当前 Android Release 构建已显式开启以下优化：
+
+- `-O3`
+- `-DNDEBUG`
+- `-ffunction-sections`
+- `-fdata-sections`
+- `-Wl,--gc-sections`
+- `CXX_VISIBILITY_PRESET hidden`
+- `VISIBILITY_INLINES_HIDDEN YES`
+
+说明：
+
+- 这些选项不会改变 JNI / C 接口调用方式。
+- 对外仍通过当前导出的 `nativeLoadObbModel` / `nativeRunObb` / `nativeRelease` 等接口使用。
+
 ## 调用借口
 
 ## 1. Android Studio 工程内放置文件
@@ -100,6 +115,12 @@ JNI 接口签名（当前仓库真实实现）：
 - `nativeRunObb(float[], int, int): String`
 - `isGpuActive(): boolean`
 - `nativeRelease(): void`
+
+说明：
+
+- 这次内部已优化为直接走“扁平 `FloatArray + rows + cols`”路径。
+- Android 调用方式没有变化，仍然传 `FloatArray`、`rows`、`cols`。
+- 只是 native 内部不再额外重组为 `vector<vector<float>>`。
 
 ## 4. 模型拷贝（assets -> filesDir）
 
@@ -204,6 +225,7 @@ NcnnApi.nativeRelease()
 
 - `angle` 单位是弧度（不是角度）
 - `cx/cy/l/s` 与当前 C++ 后处理输出保持一致
+- 输入 `flatData` 按行优先（row-major）展开：`flatData[r * cols + c]`
 
 ## 7. GPU/CPU 策略
 
@@ -217,6 +239,12 @@ NcnnApi.nativeRelease()
 
 - UI 提供一个“GPU 开关”
 - 同一设备先跑一次 CPU 和 GPU，记录耗时后再决定默认值
+
+补充：
+
+- 当前 native 内部已经针对 Android 路径去掉了一次二维重组拷贝。
+- 后处理内部增加了旋转框缓存和外接矩形粗筛，用于减少 `ProbIoU` 和旋转框交集计算次数。
+- 这些优化不会改变输出 JSON 结构，也不会改变现有 Kotlin 调用代码。
 
 ## 8. 常见错误与快速排查
 
