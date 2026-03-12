@@ -2,9 +2,7 @@
 #include <iostream>
 #include <thread>
 #include <algorithm>
-#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
 #include <filesystem>
-#endif
 
 namespace {
 int getRecommendedThreadCount() {

@@ -3,12 +3,7 @@
 #include <fstream>
 #include <sstream>
 #include <unordered_set>
-#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
 #include <filesystem>
-#endif
-#if defined(__ANDROID__)
-#include <ncnn/gpu.h>
-#endif
 #include <algorithm>
 #include <thread>
 

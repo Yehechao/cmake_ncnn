@@ -5,9 +5,7 @@
 #include <map>
 #include <cmath>
 #include <opencv2/opencv.hpp>
-#ifndef __EMSCRIPTEN__
-#include <omp.h>
-#endif
+#include <omp.h> 
 #include <cstring>
 
 //初始化精确颜色映射表

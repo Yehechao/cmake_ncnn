@@ -3,9 +3,7 @@
 #include <vector>
 #include <map>
 #include <numeric>
-#ifndef __EMSCRIPTEN__
 #include <omp.h>
-#endif
 #include <opencv2/opencv.hpp>
 
 namespace {
