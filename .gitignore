@@ -1,7 +1,12 @@
 /build-exe/
 /build-dll/
 /data/
-/ncnn_3rdpart/
+/ncnn_3rdpart/*
+!/ncnn_3rdpart/ncnn-20260113-webassembly/
+!/ncnn_3rdpart/ncnn-20260113-webassembly/**
+!/ncnn_3rdpart/opencv_wasm_install/
+!/ncnn_3rdpart/opencv_wasm_install/**
+/ncnn_3rdpart/opencv-mobile-4.8.0-android/
 *.dll
 *.lib
 *.exp
@@ -18,3 +23,4 @@
 *.log
 *.tmp
 *.cache
+/build
