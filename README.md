@@ -39,9 +39,3 @@ cmake --build build-cmake --config Release
 - 导入库：`cmake_ncnn.lib`
 - 动态库：`cmake_ncnn.dll`
 
-## Release 优化选项
-
-与 Visual Studio 项目保持一致：
-
-- 编译：`/O2 /Oi /Gy /GL`
-- 链接：`/LTCG /OPT:REF /OPT:ICF /INCREMENTAL:NO`
