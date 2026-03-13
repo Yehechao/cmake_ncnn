@@ -20,27 +20,69 @@ set(OpenCV_DIR "${OpenCV_PACKAGE_ROOT}/x64/vc16/lib")
 find_package(ncnn CONFIG REQUIRED)
 find_package(OpenCV CONFIG REQUIRED)
 
-add_executable(cmake_ncnn
+option(BUILD_CMAKE_NCNN_EXE "Build cmake_ncnn executable" ON)
+option(BUILD_CMAKE_NCNN_DLL "Build cmake_ncnn shared library (DLL)" OFF)
+
+if(NOT BUILD_CMAKE_NCNN_EXE AND NOT BUILD_CMAKE_NCNN_DLL)
+    message(FATAL_ERROR "At least one target must be enabled: BUILD_CMAKE_NCNN_EXE or BUILD_CMAKE_NCNN_DLL")
+endif()
+
+set(CMAKE_NCNN_CORE_SOURCES
     Classification.cpp
     Heatmap.cpp
-    main.cpp
     Post.cpp
     YoloInference.cpp
+)
+
+set(CMAKE_NCNN_PUBLIC_HEADERS
     ObjectDetectInference.h
     utils.h
 )
 
-target_include_directories(cmake_ncnn PRIVATE
-    "${CMAKE_SOURCE_DIR}"
-    "${NCNN_PACKAGE_ROOT}/include"
-    "${OpenCV_PACKAGE_ROOT}/include"
-)
-target_link_libraries(cmake_ncnn PRIVATE ncnn ${OpenCV_LIBS})
+if(BUILD_CMAKE_NCNN_EXE)
+    add_executable(cmake_ncnn
+        main.cpp
+        ${CMAKE_NCNN_CORE_SOURCES}
+        ${CMAKE_NCNN_PUBLIC_HEADERS}
+    )
 
-target_compile_options(cmake_ncnn PRIVATE /utf-8 /EHsc)
+    target_include_directories(cmake_ncnn PRIVATE
+        "${CMAKE_SOURCE_DIR}"
+        "${NCNN_PACKAGE_ROOT}/include"
+        "${OpenCV_PACKAGE_ROOT}/include"
+    )
+    target_link_libraries(cmake_ncnn PRIVATE ncnn ${OpenCV_LIBS})
+    target_compile_options(cmake_ncnn PRIVATE /utf-8 /EHsc)
 
-set_target_properties(cmake_ncnn PROPERTIES
-    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}"
-)
+    set_target_properties(cmake_ncnn PROPERTIES
+        VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}"
+    )
+endif()
+
+if(BUILD_CMAKE_NCNN_DLL)
+    add_library(cmake_ncnn_dll SHARED
+        ${CMAKE_NCNN_CORE_SOURCES}
+        ${CMAKE_NCNN_PUBLIC_HEADERS}
+    )
+
+    target_include_directories(cmake_ncnn_dll PRIVATE
+        "${CMAKE_SOURCE_DIR}"
+        "${NCNN_PACKAGE_ROOT}/include"
+        "${OpenCV_PACKAGE_ROOT}/include"
+    )
+    target_link_libraries(cmake_ncnn_dll PRIVATE ncnn ${OpenCV_LIBS})
+    target_compile_options(cmake_ncnn_dll PRIVATE /utf-8 /EHsc)
+
+    set_target_properties(cmake_ncnn_dll PROPERTIES
+        OUTPUT_NAME "cmake_ncnn"
+        WINDOWS_EXPORT_ALL_SYMBOLS ON
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}"
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        LIBRARY_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}"
+        ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        ARCHIVE_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}"
+    )
+endif()
