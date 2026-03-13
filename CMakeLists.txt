@@ -27,6 +27,26 @@ if(NOT BUILD_CMAKE_NCNN_EXE AND NOT BUILD_CMAKE_NCNN_DLL)
     message(FATAL_ERROR "At least one target must be enabled: BUILD_CMAKE_NCNN_EXE or BUILD_CMAKE_NCNN_DLL")
 endif()
 
+# Release 优化：与 Visual Studio 项目保持一致
+# /O2 /Oi /Gy 由 MSVC 默认 Release flags 提供
+# /GL + /LTCG 由 WholeProgramOptimization 提供
+function(enable_release_optimizations target_name)
+    if(MSVC)
+        target_compile_options(${target_name} PRIVATE
+            $<$<CONFIG:Release>:/Oi>
+            $<$<CONFIG:Release>:/Gy>
+            $<$<CONFIG:Release>:/GL>
+        )
+        target_link_options(${target_name} PRIVATE
+            $<$<CONFIG:Release>:/LTCG>
+            $<$<CONFIG:Release>:/OPT:REF>
+            $<$<CONFIG:Release>:/OPT:ICF>
+            $<$<CONFIG:Release>:/INCREMENTAL:NO>
+        )
+        set_property(TARGET ${target_name} PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
+    endif()
+endfunction()
+
 set(CMAKE_NCNN_CORE_SOURCES
     Classification.cpp
     Heatmap.cpp
@@ -53,6 +73,8 @@ if(BUILD_CMAKE_NCNN_EXE)
     )
     target_link_libraries(cmake_ncnn PRIVATE ncnn ${OpenCV_LIBS})
     target_compile_options(cmake_ncnn PRIVATE /utf-8 /EHsc)
+    target_compile_definitions(cmake_ncnn PRIVATE NCNN_API_EXPORTS)
+    enable_release_optimizations(cmake_ncnn)
 
     set_target_properties(cmake_ncnn PROPERTIES
         VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
@@ -74,10 +96,11 @@ if(BUILD_CMAKE_NCNN_DLL)
     )
     target_link_libraries(cmake_ncnn_dll PRIVATE ncnn ${OpenCV_LIBS})
     target_compile_options(cmake_ncnn_dll PRIVATE /utf-8 /EHsc)
+    target_compile_definitions(cmake_ncnn_dll PRIVATE NCNN_API_EXPORTS)
+    enable_release_optimizations(cmake_ncnn_dll)
 
     set_target_properties(cmake_ncnn_dll PROPERTIES
         OUTPUT_NAME "cmake_ncnn"
-        WINDOWS_EXPORT_ALL_SYMBOLS ON
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}"
         RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}"
         LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}"

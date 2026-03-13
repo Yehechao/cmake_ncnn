@@ -10,7 +10,7 @@
 #include "utils.h"
 
 
-class YoloNcnn {
+class NCNN_API YoloNcnn {
 public:
     // 加载 OBB 检测模型
     static std::shared_ptr<YoloNcnn> load_obb(
