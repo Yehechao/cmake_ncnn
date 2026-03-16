@@ -21,3 +21,4 @@
 *.tmp
 *.cache
 /build-android-arm64
+/AGENTS.md

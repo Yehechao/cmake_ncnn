@@ -13,13 +13,17 @@
 #include <thread>
 
 namespace {
-int getRecommendedThreadCount() {
+int getLogicalCoreCount() {
     unsigned int logicalCores = std::thread::hardware_concurrency();
     if (logicalCores == 0) {
         logicalCores = 4;
     }
+    return static_cast<int>(logicalCores);
+}
 
-    int threads = static_cast<int>(logicalCores / 2);
+int getRecommendedThreadCount() {
+    const int logicalCores = getLogicalCoreCount();
+    int threads = logicalCores / 2;
     if (threads < 1) {
         threads = 1;
     }
@@ -27,10 +31,11 @@ int getRecommendedThreadCount() {
 }
 
 int resolveThreadCount(int requestedThreads) {
+    const int maxThreads = getLogicalCoreCount();
     if (requestedThreads <= 0) {
-        return getRecommendedThreadCount();
+        return std::min(getRecommendedThreadCount(), maxThreads);
     }
-    return std::max(1, requestedThreads);
+    return std::min(maxThreads, std::max(1, requestedThreads));
 }
 
 #if defined(__ANDROID__)

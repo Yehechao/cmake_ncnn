@@ -6,7 +6,6 @@
 #include <filesystem>
 #include <chrono>
 #include <iomanip>
-#include <opencv2/opencv.hpp>
 #include "ObjectDetectInference.h"
 using namespace std;
 using namespace chrono;
@@ -113,19 +112,6 @@ const char* getPoseName(int classId) {
     return "未知姿势";
 }
 
-void createOutputFolder(const string& folderPath) {
-    try {
-        if (!fs::exists(folderPath)) {
-            fs::create_directories(folderPath);
-            cout << "创建结果文件夹: " << folderPath << endl;
-        }
-    }
-    catch (const fs::filesystem_error& e) {
-        cerr << "无法创建结果文件夹: " << e.what() << endl;
-    }
-}
-
-
 int main() {
 
     // NCNN 模型路径
@@ -134,7 +120,6 @@ int main() {
     string obbParamPath = "./models/AiBody416n/model.param";
     string obbBinPath = "./models/AiBody416n/model.bin";
     string input_folder = "./data";
-    string output_folder = "./results";
     int imgsz_obb = 416;
     int imgsz_cls = 224;
     int mode = 2;
@@ -150,7 +135,6 @@ int main() {
         for (size_t fileIndex = 0; fileIndex < txtFiles.size(); ++fileIndex) {
             string filePath = txtFiles[fileIndex];
             string fileName = fs::path(filePath).filename().string();
-            string baseName = fs::path(filePath).stem().string();
 
             // 读取热力图txt数据（32x64）
             vector<vector<float>> heatmapData2D = readTxtFile(filePath);
@@ -163,17 +147,7 @@ int main() {
             auto forwardDuration = duration_cast<microseconds>(end_forward - start_forward);
             cout << " [" << fileIndex + 1 << "/" << txtFiles.size() << "] 推理耗时: " << forwardDuration.count() / 1000.0 << " ms" << endl;
 
-            // 生成热力图可视化并绘制检测结果
-            cv::Mat heatmapImg = model->createHeatmapImageFromData(heatmapData2D, true, 0.03);
-
-            // 此行代码注释，解开下方 drawPredOnHeatmap(heatmapImg, obbResults) 可以去除轮廓提取，画方框蒙版
-            auto contours = model->extractContours(heatmapData2D, 10);  
-            // 提取热力图轮廓 model->drawPredOnHeatmap(heatmapImg, obbResults, contours);
-            // model->drawPredOnHeatmap(heatmapImg, obbResults)
-            // 保存结果图片
-            createOutputFolder(output_folder);
-            fs::path outPath = fs::path(output_folder) / (baseName + ".jpg");
-            cv::imwrite(outPath.string(), heatmapImg);
+            cout << "  检测数量: " << obbResults.size() << endl;
 
             if (success) {
                 totalForwardTime += forwardDuration.count();
@@ -196,37 +170,21 @@ int main() {
         for (size_t fileIndex = 0; fileIndex < txtFiles.size(); ++fileIndex) {
             string filePath = txtFiles[fileIndex];
             string fileName = fs::path(filePath).filename().string();
-            string baseName = fs::path(filePath).stem().string();
 
             // 读取热力图txt数据（32x64）
             vector<vector<float>> heatmapData2D = readTxtFile(filePath);
             vector<HeatmapResult> obbResults;   // 后处理后的检测结果
             ClassifyResult poseResult;           // 睡姿分类结果
 
-            // 推理计时：OBB检测 + 睡姿分类 + 轮廓提取
+            // 推理计时：OBB检测 + 睡姿分类
             auto start_forward = high_resolution_clock::now();
             bool success = model->forward(clsModel, heatmapData2D, obbResults, poseResult, true, 0.03f);
-            auto contours = model->extractContours(heatmapData2D, 10);  // 提取热力图轮廓
             auto end_forward = high_resolution_clock::now();
             auto forwardDuration = duration_cast<microseconds>(end_forward - start_forward);
             cout << " [" << fileIndex + 1 << "/" << txtFiles.size() << "] 推理耗时: " << forwardDuration.count() / 1000.0 << " ms" << endl;
-
-
-
-            // 绘制并保存结果图像
-            cv::Mat heatmapImg = model->createHeatmapImageFromData(heatmapData2D, true, 0.03);
-            if (!heatmapImg.empty()) {
-
-                model->drawPredOnHeatmap(heatmapImg, obbResults, heatmapData2D, contours);
-                // 在图像上标注睡姿
-                string poseLabel = "Pose: " + string(getPoseName(poseResult.classId)) +
-                    " (" + to_string(poseResult.classId) + ")";
-                cv::putText(heatmapImg, poseLabel, cv::Point(10, 25),
-                    cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 0, 0), 1);
-                createOutputFolder(output_folder);
-                fs::path outPath = fs::path(output_folder) / (baseName + ".png");
-                cv::imwrite(outPath.string(), heatmapImg);
-            }
+            cout << "  检测数量: " << obbResults.size()
+                 << ", 睡姿: " << getPoseName(poseResult.classId)
+                 << " (" << poseResult.classId << ")" << endl;
 
             // 统计推理耗时
             if (success) {

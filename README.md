@@ -1,81 +1,53 @@
-# 安卓so打包
-## Build
-1.需要安装好ndk才能打包编译
+# 安卓 `.so` 编译与接口调用指南
+
+本文档用于：  
+1) 从源码编译 `libncnn_api.so`  
+2) 在 Android 工程中正确调用当前接口（`FloatArray -> FloatArray` 结构化返回）
+
+## 1. 环境准备
+
+- 系统：Windows
+- CMake：>= 3.15
+- Ninja：已安装并可执行
+- Android NDK：建议 29.x（需包含 `android.toolchain.cmake`）
+
+请确认仓库内第三方库目录存在：
+- `ncnn_3rdpart/ncnn-20260113-android-vulkan/<ABI>/...`
+- `ncnn_3rdpart/opencv-mobile-4.8.0-android/sdk/native/...`
+
+## 2. 编译 `libncnn_api.so`
+
+在仓库根目录执行（示例 `arm64-v8a`）：
+
 ```bash
-cd cmake_ncnn
 cmake -S . -B build-android-arm64 -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=D:/software/AndroidStudioSDK/ndk/29.0.14206865/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-31 -DANDROID_STL=c++_static
-#若要适配当前工程名，可填加-DANDROID_JNI_CLASS=your/pkg/NcnnApi
 cmake --build build-android-arm64 -j8
 ```
-最后输出libncnn_api.so
 
-当前 Android Release 构建已显式开启以下优化：
+输出：
+- `build-android-arm64/libncnn_api.so`（或等价目标目录）
 
-- `-O3`
-- `-DNDEBUG`
-- `-ffunction-sections`
-- `-fdata-sections`
-- `-Wl,--gc-sections`
-- `CXX_VISIBILITY_PRESET hidden`
-- `VISIBILITY_INLINES_HIDDEN YES`
+如果你的 Android 包名/类名不是 `matrix_ncnn.app.NcnnApi`，编译时加：
 
-说明：
-
-- 这些选项不会改变 JNI / C 接口调用方式。
-- 对外仍通过当前导出的 `nativeLoadObbModel` / `nativeRunObb` / `nativeRelease` 等接口使用。
-
-## 调用借口
-
-## 1. Android Studio 工程内放置文件
-
-以测试App 工程 `D:\yhc_code\MatrixNcnnTest` 为例：
-
-### 1.1 放 `.so`
-
-- `D:\yhc_code\MatrixNcnnTest\app\src\main\jniLibs\arm64-v8a\libncnn_api.so`
-
-说明：
-
-- 当前构建命令是 `c++_static`，通常不需要额外放 `libc++_shared.so`。
-- 如果未来改成 `c++_shared`，需要额外放 `libc++_shared.so` 到同目录。
-
-### 1.2 放模型文件
-
-建议放在 assets：
-
-- `D:\yhc_code\MatrixNcnnTest\app\src\main\assets\models\AiBody416n\model.param`
-- `D:\yhc_code\MatrixNcnnTest\app\src\main\assets\models\AiBody416n\model.bin`
-
-## 2. Gradle 配置（限制 ABI）
-
-编辑 `app/build.gradle.kts`，在 `defaultConfig` 中加：
-
-```kotlin
-ndk {
-    abiFilters += "arm64-v8a"
-}
+```bash
+-DANDROID_JNI_CLASS=your/pkg/NcnnApi
 ```
 
-目的：
+## 3. Android 工程放置文件
 
-- 仅打包 `arm64-v8a`
-- 避免其它 ABI 缺少 `.so` 导致安装或运行问题
+### 3.1 放 `.so`
+- `app/src/main/jniLibs/arm64-v8a/libncnn_api.so`
 
-## 3. JNI 封装类（必须与 JNI 类路径一致）
+### 3.2 放模型
+- `app/src/main/assets/models/AiBody416n/model.param`
+- `app/src/main/assets/models/AiBody416n/model.bin`
 
-新建：
-
-- `app/src/main/java/matrix_ncnn/app/NcnnApi.kt`
+## 4. JNI 接口签名（当前实现）
 
 ```kotlin
-package matrix_ncnn.app
-
 object NcnnApi {
-    init {
-        System.loadLibrary("ncnn_api")
-    }
+    init { System.loadLibrary("ncnn_api") }
 
-    // 兼容旧调用：不传线程数，内部使用默认策略（半核心）
     external fun nativeLoadObbModel(
         paramPath: String,
         binPath: String,
@@ -85,7 +57,6 @@ object NcnnApi {
         useGpu: Boolean
     ): Boolean
 
-    // 新调用：可显式指定线程数，numThreads <= 0 时仍走默认策略
     external fun nativeLoadObbModel(
         paramPath: String,
         binPath: String,
@@ -96,187 +67,111 @@ object NcnnApi {
         numThreads: Int
     ): Boolean
 
+    // 返回结构化 FloatArray：[success, count, det0(7), det1(7), ...]
     external fun nativeRunObb(
         flatData: FloatArray,
         rows: Int,
         cols: Int
-    ): String
+    ): FloatArray
 
     external fun isGpuActive(): Boolean
-
     external fun nativeRelease()
 }
 ```
 
-JNI 接口签名（当前仓库真实实现）：
+## 5. `nativeRunObb` 输入/输出协议
 
-- `nativeLoadObbModel(String, String, int, float, float, boolean): boolean`
-- `nativeLoadObbModel(String, String, int, float, float, boolean, int): boolean`
-- `nativeRunObb(float[], int, int): String`
-- `isGpuActive(): boolean`
-- `nativeRelease(): void`
+### 输入
+- `flatData`：按行优先 `float32`（`flatData[r * cols + c]`）
+- 长度至少 `rows * cols`（当前常用 `32 * 64 = 2048`）
 
-说明：
+### 输出（结构化 `FloatArray`）
+- `packed[0]`：`success`（`1.0` 成功，`0.0` 失败）
+- `packed[1]`：`count`（检测数量）
+- 从 `packed[2]` 开始，每个检测固定 7 个字段：
+  - `id, confidence, cx, cy, l, s, angle`
 
-- 这次内部已优化为直接走“扁平 `FloatArray + rows + cols`”路径。
-- Android 调用方式没有变化，仍然传 `FloatArray`、`rows`、`cols`。
-- 只是 native 内部不再额外重组为 `vector<vector<float>>`。
+第 `i` 个检测起始偏移：
+- `base = 2 + i * 7`
 
-## 4. 模型拷贝（assets -> filesDir）
+这里“偏移”是指：第 `i` 个检测在 `packed` 数组中的起始下标。  
+示例：
+- 第 0 个检测：`base = 2`
+- 第 1 个检测：`base = 9`
+- 第 2 个检测：`base = 16`
 
-`nativeLoadObbModel` 需要的是“真实文件路径”，不能直接传 `assets/...` 字符串。
+然后按顺序读取：
+- `packed[base + 0]` -> `id`
+- `packed[base + 1]` -> `confidence`
+- `packed[base + 2]` -> `cx`
+- `packed[base + 3]` -> `cy`
+- `packed[base + 4]` -> `l`
+- `packed[base + 5]` -> `s`
+- `packed[base + 6]` -> `angle`
 
-可用工具函数：
-
-```kotlin
-package matrix_ncnn.app
-
-import android.content.Context
-import java.io.File
-
-object AssetUtils {
-    fun copyAssetToFiles(context: Context, assetPath: String): String {
-        val outFile = File(context.filesDir, assetPath.substringAfterLast('/'))
-        if (outFile.exists() && outFile.length() > 0L) return outFile.absolutePath
-
-        context.assets.open(assetPath).use { input ->
-            outFile.outputStream().use { output ->
-                input.copyTo(output)
-            }
-        }
-        return outFile.absolutePath
-    }
-}
-```
-
-## 5. 最小调用流程（Kotlin）
+## 6. 最小调用示例（Kotlin）
 
 ```kotlin
-val paramPath = AssetUtils.copyAssetToFiles(this, "models/AiBody416n/model.param")
-val binPath = AssetUtils.copyAssetToFiles(this, "models/AiBody416n/model.bin")
+val paramPath = /* assets 拷贝到 filesDir 后的绝对路径 */
+val binPath = /* assets 拷贝到 filesDir 后的绝对路径 */
 
-val useGpu = true
 val loaded = NcnnApi.nativeLoadObbModel(
     paramPath = paramPath,
     binPath = binPath,
     size = 416,
     conf = 0.25f,
     iou = 0.45f,
-    useGpu = useGpu
+    useGpu = true,
+    numThreads = 4
 )
 check(loaded) { "nativeLoadObbModel failed" }
 
-// 可选：手动指定线程数（例如 6），<=0 时自动按半核心
-val loadedWithThreads = NcnnApi.nativeLoadObbModel(
-    paramPath = paramPath,
-    binPath = binPath,
-    size = 416,
-    conf = 0.25f,
-    iou = 0.45f,
-    useGpu = useGpu,
-    numThreads = 6
-)
-check(loadedWithThreads) { "nativeLoadObbModel(with threads) failed" }
+val rows = 32
+val cols = 64
+val input = FloatArray(rows * cols)
+// TODO: 按行优先填充 input[r * cols + c]
 
-// 检测 Vulkan 是否实际启用成功
-val gpuActive = NcnnApi.isGpuActive()
+val packed = NcnnApi.nativeRunObb(input, rows, cols)
+val success = packed.isNotEmpty() && packed[0] > 0.5f
+val count = if (packed.size >= 2) packed[1].toInt() else 0
 
-val input = FloatArray(32 * 64)
-// TODO: 按行优先填充热力图数据: input[r * 64 + c]
+if (success) {
+    for (i in 0 until count) {
+        val base = 2 + i * 7
+        if (base + 7 <= packed.size) {
+            val id = packed[base + 0].toInt()
+            val conf = packed[base + 1]
+            val cx = packed[base + 2]
+            val cy = packed[base + 3]
+            val l = packed[base + 4]
+            val s = packed[base + 5]
+            val angle = packed[base + 6]
+            // TODO: 使用检测结果
+        }
+    }
+}
 
-val json = NcnnApi.nativeRunObb(input, 32, 64)
-// TODO: 用 Gson / kotlinx.serialization 解析 json
-
-// 不再需要时调用
 NcnnApi.nativeRelease()
 ```
 
-## 6. 输出 JSON 结构
+## 7. 常见问题
 
-成功示例：
-
-```json
-{
-  "success": true,
-  "detections": [
-    {
-      "id": 5,
-      "confidence": 0.968,
-      "cx": 15.59,
-      "cy": 8.50,
-      "l": 21.58,
-      "s": 7.25,
-      "angle": 0.126
-    }
-  ]
-}
-```
-
-失败示例：
-
-```json
-{
-  "success": false,
-  "error": "OBB model not loaded"
-}
-```
-
-字段说明：
-
-- `angle` 单位是弧度（不是角度）
-- `cx/cy/l/s` 与当前 C++ 后处理输出保持一致
-- 输入 `flatData` 按行优先（row-major）展开：`flatData[r * cols + c]`
-
-## 7. GPU/CPU 策略
-
-- `useGpu = true`：优先 Vulkan，设备不支持会自动回退 CPU
-- `useGpu = false`：强制 CPU
-- `numThreads <= 0`：自动使用“逻辑核心数的一半”（最少 1）
-- `numThreads > 0`：使用调用方指定线程数（最少按 1 兜底）
-- `isGpuActive()`：返回当前已加载模型是否真的在用 Vulkan 推理
-
-建议：
-
-- UI 提供一个“GPU 开关”
-- 同一设备先跑一次 CPU 和 GPU，记录耗时后再决定默认值
-
-补充：
-
-- 当前 native 内部已经针对 Android 路径去掉了一次二维重组拷贝。
-- 后处理内部增加了旋转框缓存和外接矩形粗筛，用于减少 `ProbIoU` 和旋转框交集计算次数。
-- 这些优化不会改变输出 JSON 结构，也不会改变现有 Kotlin 调用代码。
-
-## 8. 常见错误与快速排查
-
-1. `java.lang.UnsatisfiedLinkError: dlopen failed`
-- 检查 `libncnn_api.so` 是否在 `app/src/main/jniLibs/arm64-v8a/`
+1. `UnsatisfiedLinkError`
+- 检查 `.so` 是否在 `jniLibs/arm64-v8a/`
 - 检查 `abiFilters` 是否包含 `arm64-v8a`
-- 检查安装设备 ABI 是否 `arm64-v8a`
 
 2. `JNI_ERR` 或找不到 native 方法
-- 检查 Kotlin 包名是否 `matrix_ncnn.app`
-- 检查类名是否 `NcnnApi`
-- 检查 JNI 类路径是否仍为 `matrix_ncnn/app/NcnnApi`
+- 检查 Kotlin 包名/类名与编译时 JNI 类路径一致
+- 若包名变更，重新编译并传 `-DANDROID_JNI_CLASS=...`
 
-3. 模型加载失败
-- 检查是否先把 `assets` 复制到了 `filesDir`
-- 检查传入的是绝对路径（例如 `.../files/model.param`）
+3. `nativeRunObb` 返回失败
+- 检查 `flatData.size >= rows * cols`
+- 检查是否先成功调用 `nativeLoadObbModel`
 
-4. 推理返回 `input data length is smaller than rows*cols`
-- 检查 `FloatArray` 长度是否 `rows * cols`
-- 当前固定输入应为 `32 * 64 = 2048`
+4. `useGpu=true` 但 `isGpuActive()==false`
+- 设备不支持或初始化失败，自动回退 CPU，属预期行为
 
-5. `useGpu = true` 但 `isGpuActive() = false`
-- 设备或驱动不支持 Vulkan，或 Vulkan 初始化未通过
-- 当前模型会自动回退 CPU，这属于预期行为
+## 8. 当前代码主链路说明
 
-## 9. 注意事项
-
-1. 确认 Android 项目包下存在 `matrix_ncnn.app.NcnnApi`。
-2. 确认 `.so` 放在 `app/src/main/jniLibs/arm64-v8a/`。
-3. 确认模型在 `assets/models/AiBody416n/`。
-4. 确认先复制模型到 `filesDir` 再调用 `nativeLoadObbModel`。
-5. 确认输入尺寸固定 `rows=32, cols=64`。
-6. 如需控制线程，改用 `nativeLoadObbModel(..., numThreads)`；不传则默认半核心。
-7. 需要确认 GPU 是否真的启用时，调用 `isGpuActive()`。
-8. 若修改包名，必须同步修改 CMake `ANDROID_JNI_CLASS` 并重新编译 `.so`。
+- 工程已精简为 OBB/Cls 推理主链路。
+- 与推理无关的画图、轮廓提取、可视化叠加代码已移除，不再影响推理路径。

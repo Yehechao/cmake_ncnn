@@ -1,7 +1,6 @@
 // ObjectDetectInference.h
 #pragma once
 
-#include <functional>
 #include <memory>
 #include <numeric>
 #include <string>
@@ -43,35 +42,6 @@ public:
              int cols,
              bool denoise = true,
              float threshold = 0.03f);
-
-    // 绘制热力图检测结果
-    void drawPredOnHeatmap(cv::Mat& img, const std::vector<HeatmapResult>& result);
-
-    // 绘制热力图检测结果（带轮廓交集）
-    void drawPredOnHeatmap(cv::Mat& img,
-                           const std::vector<HeatmapResult>& result,
-                           const std::vector<std::vector<cv::Point2f>>& contours);
-
-    // 绘制热力图检测结果（带数值网格背景，无轮廓）
-    void drawPredOnHeatmap(cv::Mat& img,
-                           const std::vector<HeatmapResult>& result,
-                           const std::vector<std::vector<float>>& heatmapData2D);
-
-    // 绘制热力图检测结果（带数值网格背景 + 轮廓交集）
-    void drawPredOnHeatmap(cv::Mat& img,
-                           const std::vector<HeatmapResult>& result,
-                           const std::vector<std::vector<float>>& heatmapData2D,
-                           const std::vector<std::vector<cv::Point2f>>& contours);
-
-    // 从热力图数据创建图像
-    cv::Mat createHeatmapImageFromData(const std::vector<std::vector<float>>& heatmapData2D,
-                                       bool denoise = true,
-                                       float threshold = 0.03f);
-
-    // 从热力图数据提取轮廓点集
-    std::vector<std::vector<cv::Point2f>> extractContours(
-        const std::vector<std::vector<float>>& heatmapData2D,
-        int threshold = 10);
 
     // 获取网络信息
     int getNetWidth() const { return m_netWidth; }
@@ -125,8 +95,6 @@ private:
                                float threshold = 0.03f,
                                int scale = 10);
 
-    cv::Mat applyHeatmapColormap(const cv::Mat& heatmap);
-
     // 公共热力图预处理（数据转换+去噪）
     cv::Mat prepareHeatmap(const std::vector<std::vector<float>>& heatmapData2D,
                            bool denoise = true,
@@ -138,18 +106,6 @@ private:
                            float threshold = 0.03f);
 
     void initColormapTableExact();
-
-    // 在热力图上绘制数值网格（数值背景图层）
-    void drawValueGrid(cv::Mat& img,
-                       const std::vector<std::vector<float>>& heatmapData2D,
-                       int scale = 20);
-
-    // 绘制火柴人骨架（公共逻辑）
-    void drawSkeleton(cv::Mat& drawImg,
-                      const std::vector<HeatmapResult>& result,
-                      std::function<cv::Point2f(float, float)> convertCoords,
-                      int lineScale = 2,
-                      int pointRadius = 4);
 
     static void convariance_matrix(float w, float h, float r,
                                    float& a, float& b, float& c);
@@ -189,6 +145,13 @@ private:
 
     // 推理输出
     ncnn::Mat m_outputMat;
+
+    // 预处理复用缓冲（减少每帧 Mat 分配）
+    cv::Mat m_heatmapFloatBuffer;
+    cv::Mat m_heatmapNormalizedBuffer;
+    cv::Mat m_heatmap8UBuffer;
+    cv::Mat m_heatmapColorBuffer;
+    cv::Mat m_heatmapEnlargedBuffer;
 
     // 颜色映射表
     cv::Mat m_colormapTable;

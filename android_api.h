@@ -8,6 +8,9 @@
 #define NCNN_API_EXPORT __attribute__((visibility("default")))
 #endif
 
+#define NCNNAPI_OBB_HEADER_FIELDS 2
+#define NCNNAPI_OBB_FIELDS_PER_DET 7
+
 extern "C" {
 
 NCNN_API_EXPORT bool ncnnapi_load_obb_model(const char* param_path,
@@ -18,9 +21,12 @@ NCNN_API_EXPORT bool ncnnapi_load_obb_model(const char* param_path,
                                             bool use_gpu,
                                             int num_threads = -1);
 
-NCNN_API_EXPORT const char* ncnnapi_run_obb(const float* flat_data,
+NCNN_API_EXPORT bool ncnnapi_run_obb_struct(const float* flat_data,
                                             int rows,
-                                            int cols);
+                                            int cols,
+                                            float* out_buffer,
+                                            int max_detections,
+                                            int* out_count);
 
 NCNN_API_EXPORT bool isGpuActive();
 

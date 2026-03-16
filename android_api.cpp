@@ -1,8 +1,7 @@
 #include "android_api.h"
 
+#include <algorithm>
 #include <memory>
-#include <sstream>
-#include <string>
 #include <vector>
 
 #include "ObjectDetectInference.h"
@@ -10,54 +9,7 @@
 namespace {
 
 std::shared_ptr<YoloNcnn> g_obb_model;
-std::string g_last_json;
-
-std::string escape_json_string(const std::string& input) {
-    std::string out;
-    out.reserve(input.size() + 8);
-    for (char ch : input) {
-        switch (ch) {
-        case '\\': out += "\\\\"; break;
-        case '"': out += "\\\""; break;
-        case '\n': out += "\\n"; break;
-        case '\r': out += "\\r"; break;
-        case '\t': out += "\\t"; break;
-        default: out += ch; break;
-        }
-    }
-    return out;
-}
-
-const char* make_error_json(const std::string& msg) {
-    g_last_json = std::string("{\"success\":false,\"error\":\"")
-        + escape_json_string(msg) + "\"}";
-    return g_last_json.c_str();
-}
-
-const char* build_result_json(const std::vector<HeatmapResult>& detections, bool success) {
-    std::ostringstream oss;
-    oss << "{\"success\":" << (success ? "true" : "false") << ",\"detections\":[";
-
-    for (size_t i = 0; i < detections.size(); ++i) {
-        if (i > 0) {
-            oss << ",";
-        }
-
-        const HeatmapResult& r = detections[i];
-        oss << "{\"id\":" << r.id
-            << ",\"confidence\":" << r.confidence
-            << ",\"cx\":" << r.cx
-            << ",\"cy\":" << r.cy
-            << ",\"l\":" << r.l
-            << ",\"s\":" << r.s
-            << ",\"angle\":" << r.angle
-            << "}";
-    }
-
-    oss << "]}";
-    g_last_json = oss.str();
-    return g_last_json.c_str();
-}
+std::vector<HeatmapResult> g_detection_buffer;
 
 } // namespace
 
@@ -69,37 +21,56 @@ extern "C" NCNN_API_EXPORT bool ncnnapi_load_obb_model(const char* param_path,
                                                        bool use_gpu,
                                                        int num_threads) {
     if (!param_path || !bin_path) {
-        make_error_json("param_path or bin_path is null");
         return false;
     }
 
     g_obb_model = YoloNcnn::load_obb(param_path, bin_path, size, conf, iou, use_gpu, num_threads);
     if (!g_obb_model) {
-        make_error_json("failed to load OBB model");
         return false;
     }
 
+    g_detection_buffer.clear();
+    g_detection_buffer.reserve(64);
     return true;
 }
 
-extern "C" NCNN_API_EXPORT const char* ncnnapi_run_obb(const float* flat_data,
+extern "C" NCNN_API_EXPORT bool ncnnapi_run_obb_struct(const float* flat_data,
                                                        int rows,
-                                                       int cols) {
-    if (!g_obb_model) {
-        return make_error_json("OBB model not loaded");
+                                                       int cols,
+                                                       float* out_buffer,
+                                                       int max_detections,
+                                                       int* out_count) {
+    if (out_count) {
+        *out_count = 0;
     }
 
-    if (!flat_data) {
-        return make_error_json("flat_data is null");
+    if (!g_obb_model || !flat_data || rows <= 0 || cols <= 0 || !out_buffer || max_detections <= 0 || !out_count) {
+        return false;
     }
 
-    if (rows <= 0 || cols <= 0) {
-        return make_error_json("invalid rows or cols");
+    g_detection_buffer.clear();
+    const bool success = g_obb_model->run(g_detection_buffer, flat_data, rows, cols, true, 0.03f);
+    if (!success) {
+        return false;
     }
 
-    std::vector<HeatmapResult> detections;
-    const bool success = g_obb_model->run(detections, flat_data, rows, cols, true, 0.03f);
-    return build_result_json(detections, success);
+    const int available = static_cast<int>(g_detection_buffer.size());
+    const int written = std::min(available, max_detections);
+    *out_count = written;
+
+    for (int i = 0; i < written; ++i) {
+        const HeatmapResult& r = g_detection_buffer[static_cast<size_t>(i)];
+        const int base = i * NCNNAPI_OBB_FIELDS_PER_DET;
+        out_buffer[base + 0] = static_cast<float>(r.id);
+        out_buffer[base + 1] = r.confidence;
+        out_buffer[base + 2] = r.cx;
+        out_buffer[base + 3] = r.cy;
+        out_buffer[base + 4] = r.l;
+        out_buffer[base + 5] = r.s;
+        out_buffer[base + 6] = r.angle;
+    }
+
+    return true;
 }
 
 extern "C" NCNN_API_EXPORT bool isGpuActive() {
@@ -108,5 +79,6 @@ extern "C" NCNN_API_EXPORT bool isGpuActive() {
 
 extern "C" NCNN_API_EXPORT void ncnnapi_release() {
     g_obb_model.reset();
-    g_last_json.clear();
+    g_detection_buffer.clear();
+    g_detection_buffer.shrink_to_fit();
 }

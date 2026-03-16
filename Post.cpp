@@ -802,11 +802,10 @@ void YoloNcnn::postprocessHeatmap(std::vector<HeatmapResult>& output,
             result.s = result.s * scale_y;
         }
         // 删除所有id4的结果（暂时不需要输出）
-       /* output.erase(
+        output.erase(
             std::remove_if(output.begin(), output.end(),
                 [](const HeatmapResult& r) { return r.id == 4; }),
             output.end()
-        );*/
-
+        );
     }
 }
