@@ -33,11 +33,11 @@ std::shared_ptr<YoloNcnn> YoloNcnn::load_obb(
 
     // 检查模型文件是否存在
     if (!std::filesystem::exists(paramPath)) {
-        std::cerr << "模型param文件不存在: " << paramPath << std::endl;
+        std::cerr << "model param file not found: " << paramPath << std::endl;
         return nullptr;
     }
     if (!std::filesystem::exists(binPath)) {
-        std::cerr << "模型bin文件不存在: " << binPath << std::endl;
+        std::cerr << "model bin file not found: " << binPath << std::endl;
         return nullptr;
     }
 
@@ -46,7 +46,7 @@ std::shared_ptr<YoloNcnn> YoloNcnn::load_obb(
     detector->m_nmsThreshold = iou;
 
     if (!detector->initialize(paramPath, binPath, numThreads)) {
-        std::cerr << "模型初始化失败" << std::endl;
+        std::cerr << "model initialization failed" << std::endl;
         return nullptr;
     }
 
@@ -64,11 +64,11 @@ bool YoloNcnn::initialize(const std::string& paramPath, const std::string& binPa
 
         // 加载模型
         if (m_net.load_param(paramPath.c_str()) != 0) {
-            std::cerr << "加载 param 文件失败: " << paramPath << std::endl;
+            std::cerr << "load param failed: " << paramPath << std::endl;
             return false;
         }
         if (m_net.load_model(binPath.c_str()) != 0) {
-            std::cerr << "加载 bin 文件失败: " << binPath << std::endl;
+            std::cerr << "load model failed: " << binPath << std::endl;
             return false;
         }
 
@@ -76,15 +76,15 @@ bool YoloNcnn::initialize(const std::string& paramPath, const std::string& binPa
         m_inputName = "in0";
         m_outputName = "out0";
 
-        std::cout << "NCNN OBB模型初始化成功!" << std::endl;
-        std::cout << "  输入尺寸: " << m_netWidth << "x" << m_netHeight << std::endl;
-        std::cout << "  线程数: " << numThreads
+        std::cout << "NCNN OBB initialized!" << std::endl;
+        std::cout << "  imgsz: " << m_netWidth << "x" << m_netHeight << std::endl;
+        std::cout << "  threads: " << numThreads
             << (numThreads > 0 ? " (manual)" : " (auto)") << std::endl;
 
         return true;
     }
     catch (const std::exception& e) {
-        std::cerr << "模型初始化错误: " << e.what() << std::endl;
+        std::cerr << "init failed: " << e.what() << std::endl;
         return false;
     }
 }
@@ -155,7 +155,7 @@ bool YoloNcnn::runInference(const cv::Mat& inputImg, const float*& outputData, s
         return true;
     }
     catch (const std::exception& e) {
-        std::cerr << "推理过程中发生错误: " << e.what() << std::endl;
+        std::cerr << "inference failed: " << e.what() << std::endl;
         return false;
     }
 }
@@ -187,7 +187,7 @@ bool YoloNcnn::run(std::vector<HeatmapResult>& output,
     }
 
     if (outputData == nullptr || outputSize == 0) {
-        std::cerr << "推理结果为空" << std::endl;
+        std::cerr << "inference result is empty" << std::endl;
         return false;
     }
 
