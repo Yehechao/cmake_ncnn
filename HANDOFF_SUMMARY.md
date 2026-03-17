@@ -1,61 +1,78 @@
-# SO 接口交接说明（当前版本）
+# HANDOFF SUMMARY
 
-## 1) 目的
-该文档仅描述当前 `.so` 可调用接口与数据协议，供另一个 Codex 直接接入。  
-不包含内部实现细节。
+## 1. 交接目标
+- 安卓项目 `D:\yhc_code\ncnn_cpu\cmake_ncnn\` 已迁移为**纯 YOLOv26 OBB 后处理**。
+- 按你的最新要求完成：
+  - 去掉旧分支兼容。
+  - 去掉同类/跨类 NMS。
+  - 保留业务规则过滤链（各 ID 关系规则）。
+  - 保留“不同类别保留不同数量”的逻辑。
 
-## 2) JNI 对外接口（Kotlin/Java）
-- `nativeLoadObbModel(paramPath: String, binPath: String, size: Int, conf: Float, iou: Float, useGpu: Boolean): Boolean`
-- `nativeLoadObbModel(paramPath: String, binPath: String, size: Int, conf: Float, iou: Float, useGpu: Boolean, numThreads: Int): Boolean`
-- `nativeRunObb(flatData: FloatArray, rows: Int, cols: Int): FloatArray`
-- `isGpuActive(): Boolean`
-- `nativeRelease(): Unit`
+## 2. 本次实际改动文件
+- `D:\yhc_code\ncnn_cpu\cmake_ncnn\ObjectDetectInference.h`
+- `D:\yhc_code\ncnn_cpu\cmake_ncnn\Post.cpp`
 
-## 3) `nativeRunObb` 协议
-- 输入：
-  - `flatData`：`float32` 扁平数组，行优先排列
-  - `rows/cols`：输入尺寸（当前常用 `32 x 64`）
-  - 约束：`flatData.size >= rows * cols`
-- 输出：结构化 `FloatArray`
-  - `packed[0]`：`success`（`1.0` 成功，`0.0` 失败）
-  - `packed[1]`：`count`（检测数量）
-  - 从 `packed[2]` 开始，每个检测 7 个字段：
-    - `id, confidence, cx, cy, l, s, angle`
+## 3. 关键改动说明
 
-## 4) 调用方解析规则
-- 第 `i` 个检测偏移：`base = 2 + i * 7`
-- 字段读取：
-  - `id = packed[base + 0].toInt()`
-  - `confidence = packed[base + 1]`
-  - `cx = packed[base + 2]`
-  - `cy = packed[base + 3]`
-  - `l = packed[base + 4]`
-  - `s = packed[base + 5]`
-  - `angle = packed[base + 6]`
+### 3.1 头文件接口清理（去 NMS 相关声明）
+- 已删除以下声明：
+  - `convariance_matrix(...)`
+  - `box_probiou(...)`
+  - `rotate_nms(...)`
+- 保留：
+  - `calc_rotate_iou(...)`
+  - `filterMaxOnePerClassHeatmap(...)`
+  - `isLimitedClass(...)`
 
-## 5) 当前交付边界
-- 当前正式接口为 `FloatArray -> FloatArray` 结构化返回版本。
-- 仅保留 OBB/Cls 推理主链路。
-- 与推理无关的画图、轮廓提取、可视化代码已移除。
+### 3.2 后处理固定为单一路径（无分支）
+- `postprocessHeatmap(...)` 改为固定流程：
+  - 日志固定显示：`流程: YOLOv26_RAW_TOPK`
+  - 不再存在 LEGACY/旧模型分支。
 
-## 6) Android 端查看 `.so` 日志（模型加载输出）
-- 结论：
-  - `YoloInference.cpp` 里的 `std::cout/std::cerr` 在 Android App 进程里**不保证稳定可见**。
-  - 如果要稳定在 Logcat 看到模型加载输出，建议使用 `__android_log_print`。
+### 3.3 解析与筛选逻辑（纯 YOLOv26 RAW）
+- 按 RAW 输出解析：
+  - `numClasses = cols - 5`
+  - `angleIndex = cols - 1`
+- 置信度过滤后执行 TopK：
+  - 固定 `k = 300`
+  - 不做同类 NMS、不做跨类 NMS
 
-- 推荐做法（native）：
-  - 在 C++ 中引入：
-    - `#include <android/log.h>`
-  - 使用：
-    - `__android_log_print(ANDROID_LOG_INFO, "ncnn_api", "输入尺寸: %dx%d", m_netWidth, m_netHeight);`
-  - 错误日志用：
-    - `__android_log_print(ANDROID_LOG_ERROR, "ncnn_api", "...");`
+### 3.4 业务过滤链与类别保留逻辑
+- 完整保留原有业务规则链（ID 关系过滤、补点逻辑等）。
+- 保留 `filterMaxOnePerClassHeatmap(output)`：
+  - 限制类（1/2/3/4/7）保留 1 个
+  - 其余类最多保留 2 个
 
-- Android Studio 查看：
-  - 打开 Logcat，过滤 `tag:ncnn_api`。
+### 3.5 结果后处理输出
+- 保留坐标回投与缩放逻辑（到热力图坐标系）。
+- 保留删除 `id=4` 的逻辑（与原行为一致）。
 
-- 命令行查看：
-  - `adb logcat -s ncnn_api`
+## 4. 兼容性影响（重要）
+- 当前安卓后处理已经是**仅 YOLOv26**方案。
+- 如果继续加载旧 YOLOv11 模型，会被按新格式解析，结果会异常。
+- 结论：部署时必须使用 YOLOv26 OBB 对应的 NCNN 模型（`.param/.bin`）。
 
-- 建议：
-  - 把模型加载成功、线程数、GPU 开关、`isGpuActive` 结果都打到同一 tag，便于联调定位。
+## 5. 安卓调用层是否需要改
+- JNI/Java/业务调用接口**不需要改签名**。
+- 仍可按原方式调用 `load_obb/run`，输入尺寸继续由调用时传入。
+- 只需要切模型文件到新 YOLOv26 OBB 版本。
+
+## 6. 运行日志验收点
+- 正常应看到：
+  - `流程: YOLOv26_RAW_TOPK`
+  - `置信度过滤后候选数: ...`
+  - `RAW TopK后候选数(k=300): ...`
+  - `类别过滤后: A -> B`
+  - `最终输出数量: ...`
+- 不应再出现：
+  - `LEGACY_RAW`
+  - 任何 NMS 相关日志
+
+## 7. 交接后建议执行（由接手同学本地完成）
+- 重新编译安卓工程并替换到目标 APK。
+- 用同一批热力图样本对比迁移前后：
+  - 输出稳定性（规则行为是否符合预期）
+  - 性能变化（无 NMS 后通常会略快，最终以实测为准）
+
+## 8. 备注
+- 本次未在交接步骤中附带构建命令和运行命令，按项目原有流程执行即可。

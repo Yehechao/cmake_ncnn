@@ -3,73 +3,54 @@
 #include <vector>
 #include <map>
 #include <numeric>
+#include <cmath>
+#include <android/log.h>
 #ifndef __EMSCRIPTEN__
 #include <omp.h>
 #endif
 #include <opencv2/opencv.hpp>
 
+#define POST_LOGI(...) __android_log_print(ANDROID_LOG_INFO, "Post", __VA_ARGS__)
+#define POST_LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "Post", __VA_ARGS__)
+
 namespace {
-struct CachedRotatedRect {
-    cv::RotatedRect rect;
-    cv::Rect2f bounds;
-};
+    struct CachedRotatedRect {
+        cv::RotatedRect rect;
+        cv::Rect2f bounds;
+    };
 
-inline bool boundsOverlap(const cv::Rect2f& a, const cv::Rect2f& b) {
-    return a.x < b.x + b.width &&
-           b.x < a.x + a.width &&
-           a.y < b.y + b.height &&
-           b.y < a.y + a.height;
-}
+    inline bool boundsOverlap(const cv::Rect2f& a, const cv::Rect2f& b) {
+        return a.x < b.x + b.width &&
+            b.x < a.x + a.width &&
+            a.y < b.y + b.height &&
+            b.y < a.y + a.height;
+    }
 
-inline CachedRotatedRect makeCachedRect(const HeatmapResult& result) {
-    CachedRotatedRect cached;
-    cached.rect = cv::RotatedRect(
-        cv::Point2f(result.cx, result.cy),
-        cv::Size2f(result.l, result.s),
-        result.angle * 180.0f / CV_PI
-    );
-    cached.bounds = cached.rect.boundingRect2f();
-    return cached;
-}
-}
+    inline CachedRotatedRect makeCachedRect(const HeatmapResult& result) {
+        CachedRotatedRect cached;
+        cached.rect = cv::RotatedRect(
+            cv::Point2f(result.cx, result.cy),
+            cv::Size2f(result.l, result.s),
+            result.angle * 180.0f / CV_PI
+        );
+        cached.bounds = cached.rect.boundingRect2f();
+        return cached;
+    }
 
-// 协方差矩阵计算
-void YoloNcnn::convariance_matrix(float w, float h, float r,
-    float& a, float& b, float& c) {
-    float a_val = w * w / 12.0f;
-    float b_val = h * h / 12.0f;
-    float cos_r = cosf(r);
-    float sin_r = sinf(r);
+    inline float normalizeAngleToRad(float angleValue) {
+        float angleRad = angleValue;
+        const float twoPi = 2.0f * static_cast<float>(CV_PI);
+        const float oneEightyRad = static_cast<float>(CV_PI);
 
-    a = a_val * cos_r * cos_r + b_val * sin_r * sin_r;
-    b = a_val * sin_r * sin_r + b_val * cos_r * cos_r;
-    c = (a_val - b_val) * sin_r * cos_r;
-}
+        // 兼容角度/弧度两种导出格式
+        if (std::fabs(angleRad) > twoPi + 1e-3f) {
+            angleRad = angleRad * static_cast<float>(CV_PI) / 180.0f;
+        }
 
-// ProbIoU 计算
-float YoloNcnn::box_probiou(float cx1, float cy1, float w1, float h1, float r1,
-    float cx2, float cy2, float w2, float h2, float r2,
-    float eps) {
-    // Calculate the prob iou between oriented bounding boxes
-    float a1, b1, c1, a2, b2, c2;
-    convariance_matrix(w1, h1, r1, a1, b1, c1);
-    convariance_matrix(w2, h2, r2, a2, b2, c2);
-
-    float dx = cx1 - cx2;
-    float dy = cy1 - cy2;
-
-    float t1 = ((a1 + a2) * dy * dy + (b1 + b2) * dx * dx) /
-        ((a1 + a2) * (b1 + b2) - (c1 + c2) * (c1 + c2) + eps);
-    float t2 = ((c1 + c2) * dx * dy) /
-        ((a1 + a2) * (b1 + b2) - (c1 + c2) * (c1 + c2) + eps);
-    float t3 = logf(((a1 + a2) * (b1 + b2) - (c1 + c2) * (c1 + c2)) /
-        (4 * sqrtf(fmaxf(a1 * b1 - c1 * c1, 0.0f)) *
-            sqrtf(fmaxf(a2 * b2 - c2 * c2, 0.0f)) + eps) + eps);
-
-    float bd = 0.25f * t1 + 0.5f * t2 + 0.5f * t3;
-    bd = fmaxf(fminf(bd, 100.0f), eps);
-    float hd = sqrtf(1.0f - expf(-bd) + eps);
-    return 1 - hd;
+        while (angleRad < 0.0f) angleRad += oneEightyRad;
+        while (angleRad >= oneEightyRad) angleRad -= oneEightyRad;
+        return angleRad;
+    }
 }
 
 // 计算两个旋转框的IoU
@@ -120,80 +101,6 @@ bool YoloNcnn::isLimitedClass(int classId) const {
         }
     }
     return false;
-}
-
-// 旋转框NMS实现
-void YoloNcnn::rotate_nms(std::vector<cv::RotatedRect>& boxes,
-    std::vector<float>& scores,
-    std::vector<int>& class_ids,
-    std::vector<int>& indices,
-    float iou_threshold) {
-    indices.clear();
-
-    if (boxes.empty()) {
-        return;
-    }
-
-    // 创建索引列表并根据分数排序（降序）
-    std::vector<int> idxs(boxes.size());
-    std::iota(idxs.begin(), idxs.end(), 0);
-    std::vector<cv::Rect2f> bounds(boxes.size());
-    for (size_t i = 0; i < boxes.size(); ++i) {
-        bounds[i] = boxes[i].boundingRect2f();
-    }
-
-    std::sort(idxs.begin(), idxs.end(), [&scores](int i1, int i2) {
-        return scores[i1] > scores[i2];
-        });
-
-    // NMS主循环
-    while (!idxs.empty()) {
-        int best_idx = idxs[0];
-        indices.push_back(best_idx);
-
-        // 如果只剩一个框，结束
-        if (idxs.size() == 1) {
-            break;
-        }
-
-        std::vector<int> rest_idxs;
-        rest_idxs.reserve(idxs.size() - 1);
-
-        for (size_t i = 1; i < idxs.size(); ++i) {
-            int current_idx = idxs[i];
-
-            // 只比较同一类别的框
-            if (class_ids[current_idx] != class_ids[best_idx]) {
-                rest_idxs.push_back(current_idx);
-                continue;
-            }
-
-            // 使用ProbIoU计算旋转框的IoU
-            const cv::RotatedRect& box1 = boxes[best_idx];
-            const cv::RotatedRect& box2 = boxes[current_idx];
-
-            if (!boundsOverlap(bounds[best_idx], bounds[current_idx])) {
-                rest_idxs.push_back(current_idx);
-                continue;
-            }
-
-            // 注意：ProbIoU需要弧度，而cv::RotatedRect存储的是角度
-            float angle1_rad = box1.angle * CV_PI / 180.0f;
-            float angle2_rad = box2.angle * CV_PI / 180.0f;
-
-            float iou = box_probiou(
-                box1.center.x, box1.center.y, box1.size.width, box1.size.height, angle1_rad,
-                box2.center.x, box2.center.y, box2.size.width, box2.size.height, angle2_rad
-            );
-
-            // 如果IoU小于阈值，保留该框
-            if (iou <= iou_threshold) {
-                rest_idxs.push_back(current_idx);
-            }
-        }
-
-        idxs = std::move(rest_idxs);
-    }
 }
 
 // 过滤HeatmapResult结果，特定类别只保留置信度最高的一个
@@ -264,68 +171,6 @@ void YoloNcnn::filterMaxOnePerClassHeatmap(std::vector<HeatmapResult>& results) 
         results.swap(filteredResults);
     }
 
-    // ========== 跨类别旋转 NMS（阈值固定 0.6）==========
-    if (results.size() <= 1) {
-        return;
-    }
-
-    const float cross_class_nms_threshold = 0.5f;
-
-    // 按置信度降序排序
-    std::sort(results.begin(), results.end(), [](const HeatmapResult& a, const HeatmapResult& b) {
-        return a.confidence > b.confidence;
-        });
-
-    std::vector<bool> suppressed(results.size(), false);
-    std::vector<CachedRotatedRect> cachedRects(results.size());
-    for (size_t i = 0; i < results.size(); ++i) {
-        cachedRects[i] = makeCachedRect(results[i]);
-    }
-
-    // 跨类别NMS只针对ID 1, 2, 7
-    auto isCrossNmsClass = [](int id) {
-        return id == 1 || id == 2 || id == 7;
-        };
-
-    for (size_t i = 0; i < results.size(); ++i) {
-        if (suppressed[i]) continue;
-
-        const HeatmapResult& r1 = results[i];
-
-        for (size_t j = i + 1; j < results.size(); ++j) {
-            if (suppressed[j]) continue;
-
-            const HeatmapResult& r2 = results[j];
-
-            // 只处理异类（不同类别）
-            if (r1.id == r2.id) continue;
-
-            // 只有两个框都属于{1, 2, 7}时才进行跨类别NMS
-            if (!isCrossNmsClass(r1.id) || !isCrossNmsClass(r2.id)) continue;
-
-            if (!boundsOverlap(cachedRects[i].bounds, cachedRects[j].bounds)) continue;
-
-            // 计算 ProbIoU
-            float iou = box_probiou(
-                r1.cx, r1.cy, r1.l, r1.s, r1.angle,
-                r2.cx, r2.cy, r2.l, r2.s, r2.angle
-            );
-
-            if (iou > cross_class_nms_threshold) {
-                suppressed[j] = true;
-            }
-        }
-    }
-
-    // 移除被抑制的结果
-    std::vector<HeatmapResult> finalResults;
-    finalResults.reserve(results.size());
-    for (size_t i = 0; i < results.size(); ++i) {
-        if (!suppressed[i]) {
-            finalResults.push_back(std::move(results[i]));
-        }
-    }
-    results.swap(finalResults);
 }
 
 void YoloNcnn::postprocessHeatmap(std::vector<HeatmapResult>& output,
@@ -334,17 +179,44 @@ void YoloNcnn::postprocessHeatmap(std::vector<HeatmapResult>& output,
 
     output.clear();
 
-    int netWidth = static_cast<int>(m_outputShape[1]);
-    int numClasses = netWidth - 5;
-    int angleIndex = netWidth - 1;
+    if (data == nullptr || m_outputMat.empty()) {
+        POST_LOGE("后处理失败：输出数据为空");
+        return;
+    }
 
-    cv::Mat outputMat(cv::Size(static_cast<int>(m_outputShape[2]),
-        static_cast<int>(m_outputShape[1])),
-        CV_32F, data);
-    outputMat = outputMat.t();
+    const int rawH = m_outputMat.h;
+    const int rawW = m_outputMat.w;
+    if (rawH <= 0 || rawW <= 0) {
+        POST_LOGE("后处理失败：输出张量尺寸非法 h=%d, w=%d", rawH, rawW);
+        return;
+    }
 
-    float* pdata = outputMat.ptr<float>();
-    int rows = outputMat.rows;
+    cv::Mat rawMat(rawH, rawW, CV_32F, data);
+    cv::Mat outputMat = (rawH <= 64 && rawW > rawH) ? rawMat.t() : rawMat;
+
+    const int rows = outputMat.rows;
+    const int cols = outputMat.cols;
+    POST_LOGI("[Post] 输出张量: %dx%d -> 解析矩阵: %dx%d, 流程: YOLOv26_RAW_TOPK",
+        rawH, rawW, rows, cols);
+
+    if (rows <= 0 || cols <= 0) {
+        POST_LOGE("[Post] 输出行列为空，跳过后处理");
+        return;
+    }
+
+    std::vector<int> classIds;
+    std::vector<float> confidences;
+    std::vector<cv::RotatedRect> boxes;
+    classIds.reserve(rows);
+    confidences.reserve(rows);
+    boxes.reserve(rows);
+
+    const int numClasses = cols - 5;
+    const int angleIndex = cols - 1;
+    if (numClasses <= 0) {
+        POST_LOGE("[Post] YOLOv26 RAW 输出特征维度不足: %d", cols);
+        return;
+    }
 
     // 预分配临时数组（每行一个槽位，-1 表示无效）
     std::vector<int> tempClassIds(rows, -1);
@@ -354,9 +226,9 @@ void YoloNcnn::postprocessHeatmap(std::vector<HeatmapResult>& output,
     // OpenMP 并行循环
 #pragma omp parallel for
     for (int r = 0; r < rows; ++r) {
-        float* prow = pdata + r * netWidth;  // 直接计算行指针
+        const float* prow = outputMat.ptr<float>(r);
 
-        cv::Mat scores(1, numClasses, CV_32F, prow + 4);
+        cv::Mat scores(1, numClasses, CV_32F, const_cast<float*>(prow + 4));
         cv::Point classIdPoint;
         double maxClassScore;
         cv::minMaxLoc(scores, nullptr, &maxClassScore, nullptr, &classIdPoint);
@@ -366,34 +238,23 @@ void YoloNcnn::postprocessHeatmap(std::vector<HeatmapResult>& output,
             float cy = prow[1];
             float w = prow[2];
             float h = prow[3];
-            float angleRad = prow[angleIndex];
+            float angleRad = normalizeAngleToRad(prow[angleIndex]);
 
-            float x = (cx - param[2]) / param[0];
-            float y = (cy - param[3]) / param[1];
-            w = w / param[0];
-            h = h / param[1];
+            float x = (cx - static_cast<float>(param[2])) / static_cast<float>(param[0]);
+            float y = (cy - static_cast<float>(param[3])) / static_cast<float>(param[1]);
+            w = w / static_cast<float>(param[0]);
+            h = h / static_cast<float>(param[1]);
 
-            float angle = angleRad * 180.0f / CV_PI;
-            while (angle < 0) angle += 180;
-            while (angle >= 180) angle -= 180;
-
-            if (w > 0 && h > 0) {
+            if (w > 0.0f && h > 0.0f) {
                 tempClassIds[r] = classIdPoint.x;
                 tempConfidences[r] = static_cast<float>(maxClassScore);
-                tempBoxes[r] = cv::RotatedRect(cv::Point2f(x, y),
-                    cv::Size2f(w, h), angle);
+                tempBoxes[r] = cv::RotatedRect(cv::Point2f(x, y), cv::Size2f(w, h),
+                    angleRad * 180.0f / static_cast<float>(CV_PI));
             }
         }
     }
 
     // 串行过滤有效结果
-    std::vector<int> classIds;
-    std::vector<float> confidences;
-    std::vector<cv::RotatedRect> boxes;
-    classIds.reserve(rows);
-    confidences.reserve(rows);
-    boxes.reserve(rows);
-
     for (int r = 0; r < rows; ++r) {
         if (tempClassIds[r] >= 0) {
             classIds.push_back(tempClassIds[r]);
@@ -402,13 +263,21 @@ void YoloNcnn::postprocessHeatmap(std::vector<HeatmapResult>& output,
         }
     }
 
-    if (!boxes.empty()) {
-        std::vector<int> nmsResult;
-        // 使用 OpenCV 内置旋转框 NMS（测试速度）
-        rotate_nms(boxes, confidences, classIds, nmsResult, m_nmsThreshold);
+    POST_LOGI("[Post] 置信度过滤后候选数: %zu", boxes.size());
 
-        output.reserve(nmsResult.size());
-        for (int idx : nmsResult) {
+    if (!boxes.empty()) {
+        std::vector<int> selectedIndices;
+        constexpr int kRawTopK = 300;
+        selectedIndices.resize(confidences.size());
+        std::iota(selectedIndices.begin(), selectedIndices.end(), 0);
+        std::sort(selectedIndices.begin(), selectedIndices.end(),
+            [&](int a, int b) { return confidences[a] > confidences[b]; });
+        if (selectedIndices.size() > kRawTopK) {
+            selectedIndices.resize(kRawTopK);
+        }
+
+        output.reserve(selectedIndices.size());
+        for (int idx : selectedIndices) {
             HeatmapResult result;
             result.id = classIds[idx];
             result.confidence = confidences[idx];
@@ -416,14 +285,16 @@ void YoloNcnn::postprocessHeatmap(std::vector<HeatmapResult>& output,
             cv::RotatedRect box = boxes[idx];
 
             // 暂时不进行坐标转换，等所有处理完成后统一转换
-            result.cx = box.center.x; 
-            result.cy = box.center.y;  
-            result.l = box.size.width;  
-            result.s = box.size.height;  
+            result.cx = box.center.x;
+            result.cy = box.center.y;
+            result.l = box.size.width;
+            result.s = box.size.height;
             result.angle = box.angle * CV_PI / 180.0f;  // 角度转为弧度
 
             output.push_back(result);
         }
+
+        POST_LOGI("[Post] RAW TopK后候选数(k=300): %zu", output.size());
 
         // 1：id5与id1、id3、id6有交集则删除
         {
@@ -699,10 +570,10 @@ void YoloNcnn::postprocessHeatmap(std::vector<HeatmapResult>& output,
 
             for (const auto& result : output) {
                 if (result.id == 0) {
-                    id0Results.push_back({result, makeCachedRect(result)});
+                    id0Results.push_back({ result, makeCachedRect(result) });
                 }
                 else if (result.id == 5) {
-                    id5Results.push_back({result, makeCachedRect(result)});
+                    id5Results.push_back({ result, makeCachedRect(result) });
                 }
             }
 
@@ -781,7 +652,9 @@ void YoloNcnn::postprocessHeatmap(std::vector<HeatmapResult>& output,
         }
 
         // 执行每个类别保留一个结果的过滤
+        const size_t beforeClassFilter = output.size();
         filterMaxOnePerClassHeatmap(output);
+        POST_LOGI("[Post] 类别过滤后: %zu -> %zu", beforeClassFilter, output.size());
 
         if (output.size() < 3) {
             output.clear();
@@ -801,11 +674,13 @@ void YoloNcnn::postprocessHeatmap(std::vector<HeatmapResult>& output,
             result.l = result.l * scale_x;
             result.s = result.s * scale_y;
         }
+        POST_LOGI("[Post] 最终输出数量: %zu", output.size());
         // 删除所有id4的结果（暂时不需要输出）
         output.erase(
             std::remove_if(output.begin(), output.end(),
                 [](const HeatmapResult& r) { return r.id == 4; }),
             output.end()
         );
+
     }
 }
