@@ -1,5 +1,5 @@
 ﻿#include "ObjectDetectInference.h"
-#include <iostream>
+#include "ncnn_log.h"
 #include <thread>
 #include <algorithm>
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
@@ -39,11 +39,11 @@ std::shared_ptr<YoloNcnn> YoloNcnn::load_cls(
 
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
     if (!std::filesystem::exists(paramPath)) {
-        std::cerr << "classification param file not found: " << paramPath << std::endl;
+        NCNNAPI_LOGE("classification param file not found: %s", paramPath.c_str());
         return nullptr;
     }
     if (!std::filesystem::exists(binPath)) {
-        std::cerr << "classification bin file not found: " << binPath << std::endl;
+        NCNNAPI_LOGE("classification bin file not found: %s", binPath.c_str());
         return nullptr;
     }
 #endif
@@ -52,7 +52,7 @@ std::shared_ptr<YoloNcnn> YoloNcnn::load_cls(
     classifier->m_isClassifier = true;
 
     if (!classifier->initializeCls(paramPath, binPath, preferGpu, numThreads)) {
-        std::cerr << "classification model initialize failed" << std::endl;
+        NCNNAPI_LOGE("classification model initialize failed");
         return nullptr;
     }
 
@@ -73,11 +73,11 @@ bool YoloNcnn::initializeCls(const std::string& paramPath, const std::string& bi
         m_net.opt.lightmode = true;
 
         if (m_net.load_param(paramPath.c_str()) != 0) {
-            std::cerr << "load classification param failed: " << paramPath << std::endl;
+            NCNNAPI_LOGE("load classification param failed: %s", paramPath.c_str());
             return false;
         }
         if (m_net.load_model(binPath.c_str()) != 0) {
-            std::cerr << "load classification bin failed: " << binPath << std::endl;
+            NCNNAPI_LOGE("load classification bin failed: %s", binPath.c_str());
             return false;
         }
 
@@ -85,17 +85,16 @@ bool YoloNcnn::initializeCls(const std::string& paramPath, const std::string& bi
         m_outputName = "out0";
         initColormapTableExact();
 
-        std::cout << "NCNN classification model initialized." << std::endl;
-        std::cout << "  input size: " << m_netWidth << "x" << m_netHeight << std::endl;
-        std::cout << "  threads: " << num_cores
-                  << (numThreads > 0 ? " (manual)" : " (auto)") << std::endl;
-        std::cout << "  Vulkan: " << (m_useVulkanCompute ? "ON" : "OFF") << std::endl;
-        std::cout << "  GPU preference: " << (preferGpu ? "ON" : "OFF") << std::endl;
+        NCNNAPI_LOGI("NCNN classification model initialized.");
+        NCNNAPI_LOGI("  input size: %dx%d", m_netWidth, m_netHeight);
+        NCNNAPI_LOGI("  threads: %d (%s)", num_cores, numThreads > 0 ? "manual" : "auto");
+        NCNNAPI_LOGI("  Vulkan: %s", m_useVulkanCompute ? "ON" : "OFF");
+        NCNNAPI_LOGI("  GPU preference: %s", preferGpu ? "ON" : "OFF");
 
         return true;
     }
     catch (const std::exception& e) {
-        std::cerr << "classification model init exception: " << e.what() << std::endl;
+        NCNNAPI_LOGE("classification model init exception: %s", e.what());
         return false;
     }
 }
@@ -106,7 +105,7 @@ ClassifyResult YoloNcnn::runCls(const std::vector<std::vector<float>>& heatmapDa
     ClassifyResult result;
 
     if (!m_isClassifier) {
-        std::cerr << "current model is not classifier, please load with load_cls" << std::endl;
+        NCNNAPI_LOGE("current model is not classifier, please load with load_cls");
         return result;
     }
 
@@ -116,7 +115,7 @@ ClassifyResult YoloNcnn::runCls(const std::vector<std::vector<float>>& heatmapDa
 
     cv::Mat heatmapImage = processHeatmapData(heatmapData2D, denoise, threshold, 5);
     if (heatmapImage.empty()) {
-        std::cerr << "classification inference: heatmap preprocessing failed" << std::endl;
+        NCNNAPI_LOGE("classification inference: heatmap preprocessing failed");
         return result;
     }
 
@@ -173,7 +172,7 @@ ClassifyResult YoloNcnn::runCls(const std::vector<std::vector<float>>& heatmapDa
         ex.extract(m_outputName.c_str(), out);
 
         if (out.empty()) {
-            std::cerr << "classification inference error: empty output tensor" << std::endl;
+            NCNNAPI_LOGE("classification inference error: empty output tensor");
             return result;
         }
 
@@ -181,7 +180,7 @@ ClassifyResult YoloNcnn::runCls(const std::vector<std::vector<float>>& heatmapDa
         size_t numClasses = out_flattened.w;
 
         if (numClasses == 0) {
-            std::cerr << "classification inference error: class count is zero" << std::endl;
+            NCNNAPI_LOGE("classification inference error: class count is zero");
             return result;
         }
 
@@ -199,7 +198,7 @@ ClassifyResult YoloNcnn::runCls(const std::vector<std::vector<float>>& heatmapDa
         result.confidence = bestScore;
     }
     catch (const std::exception& e) {
-        std::cerr << "classification inference exception: " << e.what() << std::endl;
+        NCNNAPI_LOGE("classification inference exception: %s", e.what());
     }
 
     return result;

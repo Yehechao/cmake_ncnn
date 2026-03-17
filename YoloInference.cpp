@@ -1,5 +1,5 @@
 ﻿#include "ObjectDetectInference.h"
-#include <iostream>
+#include "ncnn_log.h"
 #include <fstream>
 #include <sstream>
 #include <unordered_set>
@@ -94,11 +94,11 @@ std::shared_ptr<YoloNcnn> YoloNcnn::load_obb(
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
     // 检查模型文件是否存在
     if (!std::filesystem::exists(paramPath)) {
-        std::cerr << "模型param文件不存在: " << paramPath << std::endl;
+        NCNNAPI_LOGE("模型param文件不存在: %s", paramPath.c_str());
         return nullptr;
     }
     if (!std::filesystem::exists(binPath)) {
-        std::cerr << "模型bin文件不存在: " << binPath << std::endl;
+        NCNNAPI_LOGE("模型bin文件不存在: %s", binPath.c_str());
         return nullptr;
     }
 #endif
@@ -108,7 +108,7 @@ std::shared_ptr<YoloNcnn> YoloNcnn::load_obb(
     detector->m_nmsThreshold = iou;
 
     if (!detector->initialize(paramPath, binPath, preferGpu, numThreads)) {
-        std::cerr << "模型初始化失败" << std::endl;
+        NCNNAPI_LOGE("模型初始化失败");
         return nullptr;
     }
 
@@ -130,11 +130,11 @@ bool YoloNcnn::initialize(const std::string& paramPath, const std::string& binPa
         
         // 加载模型
         if (m_net.load_param(paramPath.c_str()) != 0) {
-            std::cerr << "加载 param 文件失败: " << paramPath << std::endl;
+            NCNNAPI_LOGE("加载 param 文件失败: %s", paramPath.c_str());
             return false;
         }
         if (m_net.load_model(binPath.c_str()) != 0) {
-            std::cerr << "加载 bin 文件失败: " << binPath << std::endl;
+            NCNNAPI_LOGE("加载 bin 文件失败: %s", binPath.c_str());
             return false;
         }
         
@@ -142,17 +142,16 @@ bool YoloNcnn::initialize(const std::string& paramPath, const std::string& binPa
         m_inputName = "in0";
         m_outputName = "out0";
         
-        std::cout << "NCNN OBB模型初始化成功!" << std::endl;
-        std::cout << "  输入尺寸: " << m_netWidth << "x" << m_netHeight << std::endl;
-        std::cout << "  线程数: " << num_cores
-                  << (numThreads > 0 ? " (manual)" : " (auto)") << std::endl;
-        std::cout << "  Vulkan: " << (m_useVulkanCompute ? "ON" : "OFF") << std::endl;
-        std::cout << "  GPU preference: " << (preferGpu ? "ON" : "OFF") << std::endl;
+        NCNNAPI_LOGI("NCNN OBB模型初始化成功!");
+        NCNNAPI_LOGI("  输入尺寸: %dx%d", m_netWidth, m_netHeight);
+        NCNNAPI_LOGI("  线程数: %d (%s)", num_cores, numThreads > 0 ? "manual" : "auto");
+        NCNNAPI_LOGI("  Vulkan: %s", m_useVulkanCompute ? "ON" : "OFF");
+        NCNNAPI_LOGI("  GPU preference: %s", preferGpu ? "ON" : "OFF");
 
         return true;
     }
     catch (const std::exception& e) {
-        std::cerr << "模型初始化错误: " << e.what() << std::endl;
+        NCNNAPI_LOGE("模型初始化错误: %s", e.what());
         return false;
     }
 }
@@ -223,7 +222,7 @@ bool YoloNcnn::runInference(const cv::Mat& inputImg, const float*& outputData, s
         return true;
     }
     catch (const std::exception& e) {
-        std::cerr << "推理过程中发生错误: " << e.what() << std::endl;
+        NCNNAPI_LOGE("推理过程中发生错误: %s", e.what());
         return false;
     }
 }
@@ -255,7 +254,7 @@ bool YoloNcnn::run(std::vector<HeatmapResult>& output,
     }
 
     if (outputData == nullptr || outputSize == 0) {
-        std::cerr << "推理结果为空" << std::endl;
+        NCNNAPI_LOGE("推理结果为空");
         return false;
     }
 
@@ -296,7 +295,7 @@ bool YoloNcnn::run(std::vector<HeatmapResult>& output,
     }
 
     if (outputData == nullptr || outputSize == 0) {
-        std::cerr << "推理结果为空" << std::endl;
+        NCNNAPI_LOGE("推理结果为空");
         return false;
     }
 
