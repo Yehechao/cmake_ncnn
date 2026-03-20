@@ -1,0 +1,71 @@
+{
+	"cmake" : 
+	{
+		"generator" : 
+		{
+			"multiConfig" : true,
+			"name" : "Visual Studio 14 2015",
+			"platform" : "win32"
+		},
+		"paths" : 
+		{
+			"cmake" : "D:/software/cmake/bin/cmake.exe",
+			"cpack" : "D:/software/cmake/bin/cpack.exe",
+			"ctest" : "D:/software/cmake/bin/ctest.exe",
+			"root" : "D:/software/cmake/share/cmake-4.2"
+		},
+		"version" : 
+		{
+			"isDirty" : false,
+			"major" : 4,
+			"minor" : 2,
+			"patch" : 1,
+			"string" : "4.2.1",
+			"suffix" : ""
+		}
+	},
+	"objects" : [],
+	"reply" : 
+	{
+		"client-vscode" : 
+		{
+			"query.json" : 
+			{
+				"requests" : 
+				[
+					{
+						"kind" : "cache",
+						"version" : 2
+					},
+					{
+						"kind" : "codemodel",
+						"version" : 2
+					},
+					{
+						"kind" : "toolchains",
+						"version" : 1
+					},
+					{
+						"kind" : "cmakeFiles",
+						"version" : 1
+					}
+				],
+				"responses" : 
+				[
+					{
+						"error" : "no buildsystem generated"
+					},
+					{
+						"error" : "no buildsystem generated"
+					},
+					{
+						"error" : "no buildsystem generated"
+					},
+					{
+						"error" : "no buildsystem generated"
+					}
+				]
+			}
+		}
+	}
+}
