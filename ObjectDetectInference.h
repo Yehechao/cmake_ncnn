@@ -141,21 +141,8 @@ private:
         int lineScale = 2,
         int pointRadius = 4);
 
-    static void convariance_matrix(float w, float h, float r,
-        float& a, float& b, float& c);
-
-    static float box_probiou(float cx1, float cy1, float w1, float h1, float r1,
-        float cx2, float cy2, float w2, float h2, float r2,
-        float eps = 1e-7f);
-
     static float calc_rotate_iou(const cv::RotatedRect& rect1,
         const cv::RotatedRect& rect2);
-
-    void rotate_nms(std::vector<cv::RotatedRect>& boxes,
-        std::vector<float>& scores,
-        std::vector<int>& class_ids,
-        std::vector<int>& indices,
-        float iou_threshold);
 
     void filterMaxOnePerClassHeatmap(std::vector<HeatmapResult>& results);
     bool isLimitedClass(int classId) const;

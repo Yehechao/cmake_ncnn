@@ -5,6 +5,7 @@
 /build-obj/
 /data/
 /ncnn_3rdpart/
+/models
 *.dll
 *.lib
 *.exp
@@ -23,3 +24,4 @@
 *.cache
 /Release
 .vscode
+/AGENTS.md

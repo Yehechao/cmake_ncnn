@@ -9,7 +9,7 @@
 #endif
 
 // 热力图推理结果
-struct NCNN_API HeatmapResult {
+struct HeatmapResult {
     int id;           // 类别ID
     float confidence; // 置信度
     float cx;         // 中心x坐标（相对于输入热力图的列数）
@@ -20,8 +20,9 @@ struct NCNN_API HeatmapResult {
 };
 
 // 分类推理结果
-struct NCNN_API ClassifyResult {
+struct ClassifyResult {
     int classId;        // 分类ID（姿势ID）
     float confidence;   // 置信度
+
 };
 

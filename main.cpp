@@ -131,13 +131,13 @@ int main() {
     // NCNN 模型路径
     string clsParamPath = "./models/AiPostrue224n/model.param";
     string clsBinPath = "./models/AiPostrue224n/model.bin";
-    string obbParamPath = "./models/AiBody416n/model.param";
-    string obbBinPath = "./models/AiBody416n/model.bin";
+    string obbParamPath = "D:/yhc_code/ncnn_cpu/ncnn_api/models/model_v26_320/model.param";
+    string obbBinPath = "D:/yhc_code/ncnn_cpu/ncnn_api/models/model_v26_320/model.bin";
     string input_folder = "./data";
-    string output_folder = "./results";
-    int imgsz_obb = 416;
+    string output_folder = "./results_320";
+    int imgsz_obb = 320;
     int imgsz_cls = 224;
-    int mode = 2;
+    int mode = 1;
 
     vector<string> txtFiles = getTxtFileList(input_folder);
     long long totalForwardTime = 0;
@@ -145,7 +145,7 @@ int main() {
     //单独肢体检测
     if (mode == 1) {
         // 加载OBB旋转框检测模型
-        auto model = YoloNcnn::load_obb(obbParamPath, obbBinPath, imgsz_obb, 0.25, 0.45,4);
+        auto model = YoloNcnn::load_obb(obbParamPath, obbBinPath, imgsz_obb, 0.25, 0.35, 4);
 
         for (size_t fileIndex = 0; fileIndex < txtFiles.size(); ++fileIndex) {
             string filePath = txtFiles[fileIndex];
@@ -169,7 +169,8 @@ int main() {
             // 此行代码注释，解开下方 drawPredOnHeatmap(heatmapImg, obbResults) 可以去除轮廓提取，画方框蒙版
             auto contours = model->extractContours(heatmapData2D, 10);
             // 提取热力图轮廓 model->drawPredOnHeatmap(heatmapImg, obbResults, contours);
-            // model->drawPredOnHeatmap(heatmapImg, obbResults)
+            model->drawPredOnHeatmap(heatmapImg, obbResults, contours);
+            //model->drawPredOnHeatmap(heatmapImg, obbResults)
             // 保存结果图片
             createOutputFolder(output_folder);
             fs::path outPath = fs::path(output_folder) / (baseName + ".jpg");
